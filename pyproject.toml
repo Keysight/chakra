@@ -38,7 +38,7 @@ Repository = "https://github.com/mlcommons/chakra.git"
 "chakra.src.visualizer" = "src/visualizer"
 
 [tool.setuptools.package-data]
-"chakra.schema.protobuf" = ["et_def.proto"]
+"chakra.schema.protobuf" = ["et_def.proto", "storage.proto"]
 
 [project.scripts]
 chakra_converter = "chakra.src.converter.converter:main"
