@@ -218,7 +218,7 @@ message StorageInfo {
 // int     sync_file_range(int fd, off_t offset, off_t nbytes, unsigned int flags);
 
 message FsOp {
-  enum Op {
+  enum OpType {
     FS_OP_UNKNOWN         = 0;
     FS_OP_OPEN            = 1;
     FS_OP_CLOSE           = 2;
@@ -230,7 +230,7 @@ message FsOp {
     FS_OP_FDATASYNC       = 8;  // flush dirty data (+ metadata only if needed for retrieval)
     FS_OP_SYNC_FILE_RANGE = 9;  // flush a specified byte range of dirty data to device
   }
-  Op     op         = 1;
+  OpType op         = 1;
   string pathname   = 2;
   int32  fd         = 3;
   uint64 offset     = 4;  // byte offset within the file
@@ -258,7 +258,7 @@ message FsOp {
 //       page_cache_sync_ra:  https://elixir.bootlin.com/linux/latest/A/ident/page_cache_sync_ra
 //       page_cache_async_ra: https://elixir.bootlin.com/linux/latest/A/ident/page_cache_async_ra
 message PageOp {
-  enum Op {
+  enum OpType {
     PAGE_OP_UNKNOWN          = 0;
     PAGE_OP_ADD_TO_CACHE     = 1;  // tracepoint: filemap:mm_filemap_add_to_page_cache
     PAGE_OP_DIRTY            = 2;  // tracepoint: writeback:writeback_dirty_folio
@@ -274,7 +274,7 @@ message PageOp {
 
   // Producers populate whichever of inode / page_index / nr_pages their chosen
   // tracepoint provides.
-  Op     op         = 1;
+  OpType op         = 1;
   uint64 inode      = 2;  // backing inode when applicable
   uint64 page_index = 3;  // page offset within the file (PAGE_SIZE units)
   uint32 nr_pages   = 4;  // number of contiguous pages affected
@@ -307,7 +307,7 @@ message BlockOp {
   // Mirrors REQ_OP_* in include/linux/blk_types.h. The op type is carried by
   // every block lifecycle tracepoint (bi_opf & REQ_OP_MASK on the bio); it is
   // not itself a distinct tracepoint.
-  enum Op {
+  enum OpType {
     BLOCK_OP_UNKNOWN = 0;
     BLOCK_OP_READ    = 1;  // REQ_OP_READ — issued on page-cache miss inside read/pread
     BLOCK_OP_WRITE   = 2;  // REQ_OP_WRITE — issued by writeback (caused by fsync/fdatasync/sync_file_range)
@@ -327,7 +327,7 @@ message BlockOp {
   // Producers populate whichever of lba / nr_sectors / req_op_flags their
   // chosen tracepoint provides; for FLUSH ops, expect nr_sectors == 0 and
   // lba == 0 since flushes carry no data payload.
-  Op         op           = 1;
+  OpType     op           = 1;
   QueueEvent queue_event  = 2;
   string     device       = 3;
   uint64     lba          = 4;  // logical block address (in sectors)
