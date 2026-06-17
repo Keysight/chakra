@@ -116,10 +116,7 @@ enum NodeType {
   COMM_SEND_NODE = 5;
   COMM_RECV_NODE = 6;
   COMM_COLL_NODE = 7;
-  // Lower-level storage operation emitted under a framework-level parent node
-  // (DATALOADER_NODE, CHECKPOINT_NODE, or KV_TRANSFER_NODE). See StorageInfo.
   STORAGE_NODE = 8;
-  // Framework-level parent nodes that group their constituent STORAGE_NODEs.
   DATALOADER_NODE = 9;
   CHECKPOINT_NODE = 10;
   KV_TRANSFER_NODE = 11;
