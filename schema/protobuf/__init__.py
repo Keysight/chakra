@@ -1,4 +1,5 @@
-"""Make the generated ``*_pb2`` modules importable as a package.
+"""
+Make the generated ``*_pb2`` modules importable as a package.
 
 ``protoc``'s ``--python_out`` emits flat, absolute imports between generated
 modules (e.g. ``et_def_pb2`` contains ``import storage_pb2``). Those resolve
