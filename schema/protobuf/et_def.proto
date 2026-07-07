@@ -117,9 +117,14 @@ enum NodeType {
   COMM_RECV_NODE = 6;
   COMM_COLL_NODE = 7;
   STORAGE_NODE = 8;
-  DATALOADER_NODE = 9;
-  CHECKPOINT_NODE = 10;
-  KV_TRANSFER_NODE = 11;
+  DATA_OP_NODE = 9;
+}
+
+enum DataOpType {
+  DATA_OP_UNKNOWN     = 0;
+  DATA_OP_DATALOADER  = 1;
+  DATA_OP_CHECKPOINT  = 2;
+  DATA_OP_KV_TRANSFER = 3;
 }
 
 enum CollectiveCommType {
@@ -152,8 +157,11 @@ message Node {
   IOInfo outputs = 9;
   repeated AttributeProto attr = 10;
 
-  // Populated when type == STORAGE_NODE. See StorageInfo.
-  optional StorageInfo storage = 11;
+  // Type-specific info.
+  oneof op_info {
+    StorageInfo storage = 11;  // type == STORAGE_NODE
+    DataOpType  data_op = 12;  // type == DATA_OP_NODE
+  }
 }
 
 message IOInfo {
