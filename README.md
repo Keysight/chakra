@@ -18,7 +18,7 @@ booktitle={Ninth Conference on Machine Learning and Systems},
 year={2026},
 location={Bellevue, WA, USA},
 series={MLSys '26},
-url={https://openreview.net/forum?id=s2WcSv2Hzt}
+url={https://arxiv.org/abs/2605.11333}
 }
 ```
 
