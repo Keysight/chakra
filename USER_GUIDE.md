@@ -46,7 +46,7 @@ $ pip install traceinsight
 To uninstall Chakra, use the following command within the virtual environment.
 
 ```bash
-$ pip uninstall chakra
+$ pip uninstall mlc-chakra
 ```
 
 ## Tools Overview
