@@ -1,0 +1,268 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Chakra linter rules",
+  "description": "Syntax of rules.toml: one [[rule]] table per check.",
+  "type": "object",
+  "required": [
+    "rule",
+    "remediation"
+  ],
+  "additionalProperties": false,
+  "x-placeholders": {
+    "$comment": "Master list of message placeholders. Each key is a {name} that a message may use; the value says what the check substitutes. linter.py may supply only these names; tests/linter/test_rules_toml.py enforces it.",
+    "count": "Number of items the finding covers, such as nodes, dependencies or attributes. Rendered with thousands separators.",
+    "total": "Population size that count is drawn from, such as all nodes, replayable operators or GPU compute nodes. Rendered with thousands separators.",
+    "error": "Text of the exception that the protobuf decoder raised.",
+    "type": "Numeric node type that the installed Chakra schema does not define.",
+    "version": "Version of the installed mlc-chakra package.",
+    "field": "Dependency field that holds the cycle: ctrl_deps or data_deps.",
+    "stream": "Default stream ID (0) that all collectives use.",
+    "family": "Operator or kernel family name, derived from the node name and truncated for display.",
+    "schema": "Number of compute nodes that carry an op_schema.",
+    "name": "Name of the node or metadata attribute that is absent.",
+    "start": "Value of the start_ts metadata attribute.",
+    "finish": "Value of the finish_ts metadata attribute."
+  },
+  "properties": {
+    "rule": {
+      "$comment": "Unique id and name across rules cannot be expressed in JSON Schema; enforced by tests/linter/test_rules_toml.py and load_rules in linter.py.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "enabled",
+          "severity",
+          "message",
+          "consumer_impact"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "description": "Stable code, letters plus three digits, never reused.",
+            "type": "string",
+            "pattern": "^[A-Z]{2,3}[0-9]{3}$"
+          },
+          "name": {
+            "description": "Kebab-case label for the code.",
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+          },
+          "description": {
+            "description": "What the rule checks and why it matters.",
+            "type": "string",
+            "pattern": "\\.$"
+          },
+          "enabled": {
+            "description": "Run the rule or not.",
+            "type": "boolean"
+          },
+          "severity": {
+            "description": "How a finding of the rule reports: fatal stops the scan, error, warning and info show the message, pass shows nothing. A check may override it per finding.",
+            "enum": [
+              "fatal",
+              "error",
+              "warning",
+              "info",
+              "pass"
+            ]
+          },
+          "message": {
+            "description": "Report text; {placeholders} come from the x-placeholders master list and are limited per rule by linter.py.",
+            "type": "string",
+            "minLength": 1
+          },
+          "exempt": {
+            "description": "Shell-style name patterns exempt from the check (OPS001).",
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "consumer_impact": {
+            "description": "Impact the rule sets per consumer when a finding reports at fatal, error or warning; READY means no effect, as for info and pass. One impact value per consumer; a case that differs is a separate rule. READY: no known gap, the trace fully serves the consumer. LIMITED: a known gap lowers fidelity, the consumer still works. REVIEW: the linter cannot decide, manual inspection is required. NOT SUITABLE: the consumer cannot use the trace.",
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": false,
+            "properties": {
+              "replay": {
+                "enum": [
+                  "READY",
+                  "LIMITED",
+                  "REVIEW",
+                  "NOT SUITABLE"
+                ],
+                "description": "Impact for replay: re-executing the recorded operators on hardware."
+              },
+              "simulator": {
+                "enum": [
+                  "READY",
+                  "LIMITED",
+                  "REVIEW",
+                  "NOT SUITABLE"
+                ],
+                "description": "Impact for the simulator: modeling execution time from the graph."
+              },
+              "analysis": {
+                "enum": [
+                  "READY",
+                  "LIMITED",
+                  "REVIEW",
+                  "NOT SUITABLE"
+                ],
+                "description": "Impact for analysis: studying the timing and structure of a captured run."
+              }
+            },
+            "required": [
+              "replay",
+              "simulator",
+              "analysis"
+            ]
+          },
+          "check": {
+            "description": "Integrity check that a finding of the rule fails; any such finding makes the trace fail integrity and every consumer NOT SUITABLE. Exclusive with group.",
+            "enum": [
+              "DECODE",
+              "CONTENT",
+              "SCHEMA",
+              "DAG"
+            ]
+          },
+          "group": {
+            "description": "Evidence group that a finding of the rule lowers; needs level. Exclusive with check.",
+            "enum": [
+              "TIMING",
+              "KINETO",
+              "COMM",
+              "OP_SCHEMA",
+              "IO",
+              "META",
+              "ATTR"
+            ]
+          },
+          "level": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z /_]*$",
+            "description": "Level that a finding of the rule sets for its group, such as PARTIAL or ABSENT; needs group."
+          },
+          "remediation": {
+            "description": "Next step that closes a finding of the rule; overrides the shared step of its group and level. Required when the rule has no group.",
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "consumer": {
+      "$comment": "Per-consumer identity and text; each rule's consumer_impact line sets its impact.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^SUI[0-9]{3}$"
+          },
+          "name": {
+            "type": "string",
+            "enum": [
+              "replay",
+              "simulator",
+              "analysis"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "pattern": "\\.$"
+          }
+        }
+      }
+    },
+    "remediation": {
+      "$comment": "Shared next steps. A check key serves an integrity check; a group and level key serves a gap. Uniqueness and coverage are enforced by load_rules in rule_config.py.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "check": {
+            "enum": [
+              "DECODE",
+              "CONTENT",
+              "SCHEMA",
+              "DAG"
+            ]
+          },
+          "group": {
+            "enum": [
+              "TIMING",
+              "KINETO",
+              "COMM",
+              "OP_SCHEMA",
+              "IO",
+              "META",
+              "ATTR"
+            ]
+          },
+          "level": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z /_]*$"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "check"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "group"
+                  ]
+                },
+                {
+                  "required": [
+                    "level"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "required": [
+              "group",
+              "level"
+            ],
+            "not": {
+              "required": [
+                "check"
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

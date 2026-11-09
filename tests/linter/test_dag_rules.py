@@ -1,0 +1,120 @@
+"""DagRules and the RuleFamily base class behave as the DAG rules specify."""
+
+from pathlib import Path
+
+import index_builder
+import linter
+import pytest
+import rule_family
+from chakra.schema.protobuf.et_def_pb2 import AttributeProto, GlobalMetadata, Node
+from chakra.src.third_party.utils.protolib import encodeMessage
+from dag_rules import DagRules
+from index_builder import IndexBuilder
+
+
+def write(path: Path, nodes: list[Node]) -> Path:
+    """Write a trace holding the given nodes."""
+    with path.open("wb") as handle:
+        encodeMessage(handle, GlobalMetadata(attr=[AttributeProto(name="pid", uint64_val=1)]))
+        for node in nodes:
+            encodeMessage(handle, node)
+    return path
+
+
+def node(node_id: int, ctrl: tuple[int, ...] = (), data: tuple[int, ...] = ()) -> Node:
+    """Build a node with the given dependencies."""
+    return Node(id=node_id, name="aten::add", type=4, duration_micros=5, ctrl_deps=ctrl, data_deps=data)
+
+
+def dag(tmp_path: Path, nodes: list[Node]) -> dict[str, int | None]:
+    """Return each reported DAG rule with its count."""
+    result = linter.scan_trace(write(tmp_path / "t.et", nodes))
+    return {p.rule: p.message.total for p in result.dag_problems or []}
+
+
+def test_clean_graph_reports_nothing(tmp_path) -> None:
+    assert dag(tmp_path, [node(1), node(2, (1,)), node(3, (1,), (2,))]) == {}
+
+
+def test_duplicate_id(tmp_path) -> None:
+    assert dag(tmp_path, [node(1), node(1)]) == {"DAG001": 1}
+
+
+def test_dangling_counts_dependencies_and_skips_root(tmp_path) -> None:
+    # Dependency 0 is a root marker; 9 and 8 are missing
+    assert dag(tmp_path, [node(1, (0,)), node(2, (9,), (8,))]) == {"DAG002": 2}
+
+
+def test_self_dependency(tmp_path) -> None:
+    assert dag(tmp_path, [node(1), node(2, (2,))]) == {"DAG003": 1}
+
+
+def test_repeat_within_one_field_only(tmp_path) -> None:
+    assert dag(tmp_path, [node(1), node(2, (1, 1))]) == {"DAG004": 1}
+    # The same parent once in each field is valid
+    assert dag(tmp_path, [node(1), node(2, (1,), (1,))]) == {}
+
+
+def test_cycle_counts_blocked_nodes_per_field(tmp_path) -> None:
+    nodes = [node(1, (2,)), node(2, (1,)), node(3, (2,))]
+    assert dag(tmp_path, nodes) == {"DAG005": 3}
+    # Opposite edges in different fields do not form a cycle
+    assert dag(tmp_path, [node(1, (2,)), node(2, (), (1,))]) == {}
+
+
+def test_count_blocked_ignores_self_and_missing_parents() -> None:
+    assert DagRules.count_blocked({1: (1,), 2: (7,)}) == (0, [])
+
+
+def test_builder_feeds_each_node_once(tmp_path) -> None:
+    path = write(tmp_path / "t.et", [node(1), node(2, (2,)), node(3, (3, 3))])
+    family = DagRules()
+    IndexBuilder(path, families=[family]).build()
+    assert (family.self_refs, family.dup_edges) == (2, 1)
+
+
+def family(*ids: str) -> type:
+    """Build a family class whose checks carry the given rule IDs."""
+    body = {f"check_{i}": rule_family.rule(i)(lambda self, index: []) for i in ids}
+    return type("Probe", (rule_family.RuleFamily,), body)
+
+
+def test_family_needs_valid_unique_rule_ids() -> None:
+    for bad in ((), ("dag1",)):
+        with pytest.raises(TypeError):
+            family(*bad)
+
+
+def test_registry_rejects_reused_rule_ids() -> None:
+    with pytest.raises(TypeError):
+        rule_family.register(family("DAG001"))
+
+
+def test_family_rules_must_exist_in_the_rule_file() -> None:
+    with pytest.raises(linter.RuleConfigError, match="ZZZ999"):
+        family("ZZZ999")()
+
+
+def test_checks_follow_declaration_order() -> None:
+    assert list(DagRules.checks) == ["DAG001", "DAG002", "DAG003", "DAG004", "DAG005"]
+
+
+def test_disabled_rule_is_skipped(tmp_path) -> None:
+    path = write(tmp_path / "t.et", [node(1, (2,)), node(2, (1,)), node(3, (3,))])
+    for disabled, expected in ((set(), {"DAG003", "DAG005"}), ({"DAG005"}, {"DAG003"}), ({"DAG003"}, {"DAG005"})):
+        family_ = DagRules(disabled)
+        index = IndexBuilder(path, families=[family_]).build()
+        assert {h.rule for h in family_.finish(index)} == expected
+    # A disabled per-node rule never accumulates
+    off = DagRules({"DAG003"})
+    IndexBuilder(path, families=[off]).build()
+    assert off.self_refs == 0
+
+
+def test_scan_reads_the_file_once(tmp_path, monkeypatch) -> None:
+    """The trace opens once; only the optional progress prescan reads again."""
+    opened: list[str] = []
+    real = index_builder.openFileRd
+    monkeypatch.setattr(index_builder, "openFileRd", lambda p: opened.append(p) or real(p))
+    linter.scan_trace(write(tmp_path / "t.et", [node(1), node(2, (1,))]))
+    assert len(opened) == 1
