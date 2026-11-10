@@ -34,18 +34,10 @@ class Rule:
     # Impact per consumer: replay, simulator, analysis; READY means no effect
     consumer_impact: dict[str, str]
     exempt: list[str] = field(default_factory=list)  # name patterns, if any
-    check: str = ""  # integrity check a finding fails, if any
-    group: str = ""  # evidence group a finding lowers, if any
-    level: str = ""  # level a finding sets for its group
-    remediation: str = ""  # next step; overrides the shared one
 
     def is_gap(self) -> bool:
-        """Return True when a finding lowers consumers, not integrity."""
-        return not self.check and self.severity not in ("info", "pass")
-
-    def remediation_key(self) -> tuple[str, str] | None:
-        """Return the shared-step key (group, level), if the rule has one."""
-        return (self.group, self.level) if self.group else None
+        """Return True when a finding lowers the impact for a consumer."""
+        return self.severity not in ("info", "pass")
 
 
 def _validate_schema(document: dict, path: Path) -> None:
@@ -70,10 +62,6 @@ class Consumer:
     description: str
 
 
-# Shared remediation keyed by integrity check or by (group, level)
-RemediationKey = str | tuple[str, str]
-
-
 def _read_document(path: Path) -> dict:
     """Parse the rule file and validate its syntax against the schema."""
     try:
@@ -85,30 +73,6 @@ def _read_document(path: Path) -> dict:
         raise RuleConfigError(f"malformed rules file {path}: {exc}") from exc
     _validate_schema(document, path)
     return document
-
-
-def _check_policy(path: Path, rules: dict[str, Rule], steps: dict[RemediationKey, str]) -> None:
-    """Reject a rule whose group, level or remediation cannot resolve."""
-    for rule in rules.values():
-        if bool(rule.group) != bool(rule.level):
-            raise RuleConfigError(f"{path}: rule {rule.id} needs group and level together")
-        if rule.check and rule.group:
-            raise RuleConfigError(f"{path}: rule {rule.id} sets both check and group")
-        if rule.check and rule.check not in steps:
-            raise RuleConfigError(f"{path}: rule {rule.id} check {rule.check} has no remediation")
-        if rule.is_gap() and not (rule.remediation or rule.remediation_key() in steps):
-            raise RuleConfigError(f"{path}: rule {rule.id} has no remediation")
-
-
-def load_remediations(path: Path = DEFAULT_RULES) -> dict[RemediationKey, str]:
-    """Load the shared remediation steps keyed by check or (group, level)."""
-    steps: dict[RemediationKey, str] = {}
-    for entry in _read_document(path)["remediation"]:
-        key = entry["check"] if "check" in entry else (entry["group"], entry["level"])
-        if key in steps:
-            raise RuleConfigError(f"{path}: duplicate remediation for {key}")
-        steps[key] = entry["text"]
-    return steps
 
 
 def load_rules(path: Path = DEFAULT_RULES) -> dict[str, Rule]:
@@ -125,7 +89,6 @@ def load_rules(path: Path = DEFAULT_RULES) -> dict[str, Rule]:
     fatal = [r for r in FATAL_RULES if r in rules and not rules[r].enabled]
     if fatal:
         raise RuleConfigError(f"{path}: rule cannot be disabled: {', '.join(fatal)}")
-    _check_policy(path, rules, load_remediations(path))
     return rules
 
 
@@ -179,9 +142,3 @@ def shipped_rules() -> dict[str, Rule]:
 def shipped_consumers() -> dict[str, Consumer]:
     """Return the consumer aggregates of the shipped file, loaded once."""
     return load_consumers(DEFAULT_RULES)
-
-
-@cache
-def shipped_remediations() -> dict[RemediationKey, str]:
-    """Return the shared remediation steps of the shipped file, loaded once."""
-    return load_remediations(DEFAULT_RULES)

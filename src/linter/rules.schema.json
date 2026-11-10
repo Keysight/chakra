@@ -4,8 +4,7 @@
   "description": "Syntax of rules.toml: one [[rule]] table per check.",
   "type": "object",
   "required": [
-    "rule",
-    "remediation"
+    "rule"
   ],
   "additionalProperties": false,
   "x-placeholders": {
@@ -124,37 +123,6 @@
               "simulator",
               "analysis"
             ]
-          },
-          "check": {
-            "description": "Integrity check that a finding of the rule fails; any such finding makes the trace fail integrity and every consumer NOT SUITABLE. Exclusive with group.",
-            "enum": [
-              "DECODE",
-              "CONTENT",
-              "SCHEMA",
-              "DAG"
-            ]
-          },
-          "group": {
-            "description": "Evidence group that a finding of the rule lowers; needs level. Exclusive with check.",
-            "enum": [
-              "TIMING",
-              "KINETO",
-              "COMM",
-              "OP_SCHEMA",
-              "IO",
-              "META",
-              "ATTR"
-            ]
-          },
-          "level": {
-            "type": "string",
-            "pattern": "^[A-Z][A-Z /_]*$",
-            "description": "Level that a finding of the rule sets for its group, such as PARTIAL or ABSENT; needs group."
-          },
-          "remediation": {
-            "description": "Next step that closes a finding of the rule; overrides the shared step of its group and level. Required when the rule has no group.",
-            "type": "string",
-            "minLength": 1
           }
         }
       }
@@ -189,79 +157,6 @@
             "pattern": "\\.$"
           }
         }
-      }
-    },
-    "remediation": {
-      "$comment": "Shared next steps. A check key serves an integrity check; a group and level key serves a gap. Uniqueness and coverage are enforced by load_rules in rule_config.py.",
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "text"
-        ],
-        "properties": {
-          "check": {
-            "enum": [
-              "DECODE",
-              "CONTENT",
-              "SCHEMA",
-              "DAG"
-            ]
-          },
-          "group": {
-            "enum": [
-              "TIMING",
-              "KINETO",
-              "COMM",
-              "OP_SCHEMA",
-              "IO",
-              "META",
-              "ATTR"
-            ]
-          },
-          "level": {
-            "type": "string",
-            "pattern": "^[A-Z][A-Z /_]*$"
-          },
-          "text": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "oneOf": [
-          {
-            "required": [
-              "check"
-            ],
-            "not": {
-              "anyOf": [
-                {
-                  "required": [
-                    "group"
-                  ]
-                },
-                {
-                  "required": [
-                    "level"
-                  ]
-                }
-              ]
-            }
-          },
-          {
-            "required": [
-              "group",
-              "level"
-            ],
-            "not": {
-              "required": [
-                "check"
-              ]
-            }
-          }
-        ]
       }
     }
   }

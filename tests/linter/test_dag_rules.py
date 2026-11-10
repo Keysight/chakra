@@ -29,7 +29,7 @@ def node(node_id: int, ctrl: tuple[int, ...] = (), data: tuple[int, ...] = ()) -
 def dag(tmp_path: Path, nodes: list[Node]) -> dict[str, int | None]:
     """Return each reported DAG rule with its count."""
     result = linter.scan_trace(write(tmp_path / "t.et", nodes))
-    return {p.rule: p.message.total for p in result.dag_problems or []}
+    return {g.rule: g.message.total for g in result.gaps if g.rule.startswith("DAG")}
 
 
 def test_clean_graph_reports_nothing(tmp_path) -> None:

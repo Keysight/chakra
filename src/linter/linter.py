@@ -14,7 +14,6 @@ try:
     from .attribute_rules import AttributeRules
     from .comm_rules import CommRules
     from .consumer import (
-        SCHEMA,
         Finding,
         Gap,
         Issue,
@@ -35,7 +34,6 @@ except ImportError:  # run as a top-level module, not a package
     from attribute_rules import AttributeRules  # type: ignore[no-redef]
     from comm_rules import CommRules  # type: ignore[no-redef]
     from consumer import (  # type: ignore[no-redef]
-        SCHEMA,
         Finding,
         Gap,
         Issue,
@@ -84,7 +82,7 @@ def lint_trace(
     on_progress: Callable[[int, int], None] | None = None,
 ) -> TraceResult:
     """
-    Scan one trace; integrity defects invalidate it, gaps qualify its uses.
+    Scan one trace; each finding sets an impact per consumer.
 
     The trace origin (PyTorch capture or synthetic) is inferred from content.
     Findings of rules in `disabled` are dropped before grading.
@@ -149,10 +147,9 @@ def scan_trace(
     fatal = [h for h in hits if h.severity == FATAL]
     if fatal:
         result.problems += [render(messages, h.rule, **h.values) for h in fatal]
-        result.fatal_rule, result.readable = fatal[0].rule, not index.error
+        result.fatal_rule = fatal[0].rule
         return result
     hits += [hit for family in families[1:] for hit in family.finish(index)]
-    result.dag_problems = []
     shipped = shipped_rules()
     for hit in hits:
         message = render(messages, hit.rule, **hit.values)
@@ -163,14 +160,6 @@ def scan_trace(
             result.notes.append(Issue(hit.rule, message, hit.ids))
         elif shipped[hit.rule].is_gap():
             result.gaps.append(Gap.from_hit(hit, message))
-        elif shipped[hit.rule].check:
-            issue = Issue(hit.rule, message, hit.ids)
-            if shipped[hit.rule].check == SCHEMA:
-                result.schema_problems[hit.values["type"]] = issue  # type: ignore[index]
-            else:
-                result.dag_problems.append(issue)
-        else:
-            result.notes.append(Issue(hit.rule, message, hit.ids))
     return result
 
 

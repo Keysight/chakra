@@ -21,10 +21,10 @@ def trace(path: Path, durations: list[tuple[int, int]], captured: bool = True) -
     return path
 
 
-def gaps(tmp_path: Path, durations, captured: bool = True, disabled=frozenset()) -> dict[tuple, str]:
-    """Return timing gaps as {(rule, node type): level}."""
+def gaps(tmp_path: Path, durations, captured: bool = True, disabled=frozenset()) -> set[tuple]:
+    """Return timing gaps as {(rule, node type)}."""
     result = linter.scan_trace(trace(tmp_path / "t.et", durations, captured), disabled=disabled)
-    return {(g.rule, g.node_type): g.level for g in result.gaps if g.rule.startswith("TIM")}
+    return {(g.rule, g.node_type) for g in result.gaps if g.rule.startswith("TIM")}
 
 
 def mix(zeros: int, total: int, node_type: int = COMP_NODE) -> list[tuple[int, int]]:
@@ -33,38 +33,38 @@ def mix(zeros: int, total: int, node_type: int = COMP_NODE) -> list[tuple[int, i
 
 
 def test_all_zero_is_absent_at_trace_level(tmp_path) -> None:
-    assert gaps(tmp_path, mix(10, 10)) == {("TIM001", None): "ABSENT"}
+    assert gaps(tmp_path, mix(10, 10)) == {("TIM001", None)}
 
 
 def test_majority_zero_is_absent_at_trace_level(tmp_path) -> None:
     mixed = [(COMP_NODE, 0)] * 3 + [(COMP_NODE, 5)] * 2 + [(COMM_COLL_NODE, 5)] * 5
     # 3 of 10 zero, below the bar, but COMP is not entirely zero either
-    assert gaps(tmp_path, mixed) == {("TIM002", None): "PARTIAL"}
-    assert gaps(tmp_path, mix(6, 10)) == {("TIM001", None): "ABSENT"}
+    assert gaps(tmp_path, mixed) == {("TIM002", None)}
+    assert gaps(tmp_path, mix(6, 10)) == {("TIM001", None)}
 
 
 def test_type_wholly_zero_reports_that_type_only(tmp_path) -> None:
     # Per-type finding replaces the trace-level partial finding
     durations = [(COMP_NODE, 0)] * 3 + [(COMM_COLL_NODE, 5)] * 7
-    assert gaps(tmp_path, durations) == {("TIM001", COMP_NODE): "ABSENT"}
+    assert gaps(tmp_path, durations) == {("TIM001", COMP_NODE)}
 
 
 def test_partial_share_between_the_bars(tmp_path) -> None:
-    assert gaps(tmp_path, mix(1, 10)) == {("TIM002", None): "PARTIAL"}
+    assert gaps(tmp_path, mix(1, 10)) == {("TIM002", None)}
 
 
 def test_healthy_trace_reports_nothing(tmp_path) -> None:
-    assert gaps(tmp_path, mix(1, 100)) == {}
+    assert gaps(tmp_path, mix(1, 100)) == set()
 
 
 def test_synthetic_all_zero_is_unknown(tmp_path) -> None:
-    assert gaps(tmp_path, mix(10, 10), captured=False) == {("TIM003", None): ""}
-    assert gaps(tmp_path, mix(5, 10), captured=False) == {}
+    assert gaps(tmp_path, mix(10, 10), captured=False) == {("TIM003", None)}
+    assert gaps(tmp_path, mix(5, 10), captured=False) == set()
 
 
 def test_disabled_type_rule_still_suppresses_partial(tmp_path) -> None:
     durations = [(COMP_NODE, 0)] * 3 + [(COMM_COLL_NODE, 5)] * 7
-    assert gaps(tmp_path, durations, disabled=frozenset({"TIM001"})) == {}
+    assert gaps(tmp_path, durations, disabled=frozenset({"TIM001"})) == set()
 
 
 @pytest.mark.parametrize("rule", ["TIM001", "TIM002", "TIM003"])

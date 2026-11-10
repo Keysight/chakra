@@ -17,10 +17,10 @@ def gap(rule: str) -> consumer.Gap:
 def test_every_family_gap_rule_is_a_gap_in_the_toml() -> None:
     import rule_family
 
-    notes = {"OPS002"}  # a note, not a gap
+    notes = {"OPS002", "INT004"}  # notes, not gaps
     needed = {rule for family in rule_family.FAMILIES for rule in family.checks} - notes
-    # Integrity and graph findings are problems, not gaps
-    needed -= {r for r in needed if r.startswith(("DAG", "INT"))}
+    # Fatal findings stop the scan before grading
+    needed -= {"INT001", "INT002"}
     rules = rule_config.shipped_rules()
     assert {r for r in needed if rules[r].is_gap()} == needed
 
@@ -39,12 +39,6 @@ def test_consumer_impact_values_are_levels_never_tables() -> None:
         assert all(isinstance(v, str) for v in rule.consumer_impact.values()), rule.id
 
 
-def test_gap_level_comes_from_the_policy() -> None:
-    assert gap("KIN005").level == "UNLINKED"
-    assert gap("KIN003").level == "PARTIAL"
-    assert gap("OPS005").level == "NONE"
-
-
 def test_every_rule_declares_a_consumer_impact_for_all_three_consumers() -> None:
     for rule in rule_config.shipped_rules().values():
         assert list(rule.consumer_impact) == ["replay", "simulator", "analysis"], rule.id
@@ -54,50 +48,6 @@ def test_consumer_impact_is_ready_exactly_when_the_rule_cannot_lower_a_consumer(
     for rule in rule_config.shipped_rules().values():
         ready = set(rule.consumer_impact.values()) == {"READY"}
         assert ready == (rule.severity in ("info", "pass")), rule.id
-
-
-def test_integrity_rules_make_every_consumer_not_suitable() -> None:
-    checked = [r for r in rule_config.shipped_rules().values() if r.check]
-    assert {r.id for r in checked} >= {"INT001", "INT002", "INT003", "DAG001"}
-    for rule in checked:
-        assert set(rule.consumer_impact.values()) == {"NOT SUITABLE"}, rule.id
-
-
-def test_every_gap_rule_resolves_a_remediation() -> None:
-    steps = rule_config.shipped_remediations()
-    for rule in rule_config.shipped_rules().values():
-        if rule.is_gap():
-            assert rule.remediation or rule.remediation_key() in steps, rule.id
-
-
-def test_gap_carries_the_rule_remediation_over_the_shared_one() -> None:
-    assert gap("MET001").remediation() == rule_config.shipped_rules()["MET001"].remediation
-    assert gap("KIN005").remediation() == rule_config.shipped_remediations()[("KINETO", "UNLINKED")]
-
-
-def test_every_shared_remediation_is_used() -> None:
-    rules = rule_config.shipped_rules().values()
-    used = {r.remediation_key() for r in rules} | {r.check for r in rules}
-    assert set(rule_config.shipped_remediations()) <= used
-
-
-def _mutated(tmp_path, old: str, new: str):
-    text = rule_config.DEFAULT_RULES.read_text(encoding="utf-8").replace(old, new, 1)
-    path = tmp_path / "rules.toml"
-    path.write_text(text, encoding="utf-8")
-    return path
-
-
-def test_group_without_level_is_rejected(tmp_path) -> None:
-    path = _mutated(tmp_path, 'level = "ABSENT"\n', "")
-    with pytest.raises(rule_config.RuleConfigError, match="group and level"):
-        rule_config.load_rules(path)
-
-
-def test_gap_rule_without_remediation_is_rejected(tmp_path) -> None:
-    path = _mutated(tmp_path, 'group = "TIMING"\nlevel = "ABSENT"\n', "")
-    with pytest.raises(rule_config.RuleConfigError, match="no remediation"):
-        rule_config.load_rules(path)
 
 
 def test_aggregates_cover_the_three_consumers_in_order() -> None:
@@ -132,6 +82,6 @@ def test_info_and_pass_hits_lower_no_consumer_level(tmp_path, monkeypatch, sever
         lambda self, index: [replace(h, severity=severity) for h in real(self, index)],
     )
     result = linter.lint_trace(path)
-    assert not result.gaps and not result.schema_problems and not result.dag_problems
+    assert not result.gaps
     assert all(result.status(c)[0] == consumer.READY for c in consumer.CONSUMERS)
     assert bool(result.findings) == (severity == "info")

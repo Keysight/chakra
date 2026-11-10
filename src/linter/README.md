@@ -1,4 +1,4 @@
-# Chakra Linter
+# The Chakra Linter
 
 ## Purpose
 
@@ -60,10 +60,9 @@ chakra_linter traces/ --report-output report.md
 
 ## Methodology
 
-- Usability is a degree, not a yes or no answer. Every trace receives integrity levels (tier 0), evidence levels per check group, and a usability level per consumer (tier 1).
-- Tier 0 covers decode failure, empty traces, schema violations, and DAG validity. A tier 0 defect makes the trace unusable for every consumer.
-- Evidence levels grade how complete each check group is. Each gap sets a level for its group; the worst level wins.
-- Tier 1 gaps reduce usability for specific consumers and never invalidate a trace. Each gap lists the consumers it affects.
+- Usability is a degree, not a yes or no answer. Every trace receives one usability value per consumer.
+- Each rule sets a value for each consumer it affects; the worst value wins.
+- Rules for decode failure, empty traces, schema violations, and DAG validity set `NOT SUITABLE` for every consumer.
 - Consumers:
   - **Replay:** re-executes operators; requires collective and point-to-point attributes, and replay units: the outermost CPU nodes (`is_cpu_op` true) that carry a non-empty `op_schema`, with I/O that fits it. Replay runs a unit with its whole subtree, so descendants are not graded. GPU kernels need no schema; replay runs the CPU operator that launches them. Durations may be zero, because replay runs the operator rather than modeling its time.
   - **Simulator:** models timing from the graph; requires communication attributes and a duration or I/O for each compute node.
@@ -143,7 +142,7 @@ sequenceDiagram
     POL->>CFG: message template by rule ID
 
     rect rgb(255, 224, 178)
-    Note over POL: EXTEND 4: add a consumer_impact line to the rule<br/>entry in rules.toml; add `group`, `level` and `remediation` (or a shared `[[remediation]]` entry) in the same file
+    Note over POL: EXTEND 4: add a consumer_impact line to the rule<br/>entry in rules.toml, and in the same file
     end
 
     POL-->>CLI: Gap, Issue
@@ -156,7 +155,7 @@ sequenceDiagram
 |-----------------------|--------------------------------------------------------------------------------------------|
 | Reword or toggle rule | `rules.toml`                                                                               |
 | New placeholder       | `x-placeholders` in `rules.schema.json`, before use in a message                           |
-| New rule, existing family | `rules.toml` entry, `@rule("ID")` method in `*_rules.py`, a `consumer_impact` line, `group`, `level` and remediation on the rule entry |
+| New rule, existing family | `rules.toml` entry with a `consumer_impact` line, `@rule("ID")` method in `*_rules.py` |
 | New family            | New `*_rules.py` with `@register` subclass, instance and `finish` call in `scan_trace`     |
 | New shared fact       | Field on `TraceIndex`, filled in `IndexBuilder`; never a per-family node copy              |
 
@@ -209,8 +208,6 @@ message = "self-dependency"
 - Rule family modules (`*_rules.py`) own detection: each family class fills accumulators during the single pass over the trace, and its `@rule("ID")` methods turn them into findings.
 - `rules.toml` also holds one suitability entry per consumer (`SUI001` to `SUI003`): its ID, name and text.
 - Each rule sets its consumer impact on its own `consumer_impact` line, for example `consumer_impact = { replay = "REVIEW", analysis = "REVIEW" }`. The line applies when a finding of the rule reports at `fatal`, `error` or `warning`.
-- Each rule sets its evidence `group` and `level` in `rules.toml`; an integrity rule sets `check` instead.
-- Remediation lives in `rules.toml`: a shared `[[remediation]]` entry per check or (group, level), plus an optional `remediation` on a rule that overrides it. A gap rule without a resolvable remediation fails at load.
 - `rules.toml` holds the one severity and the one `consumer_impact` of each rule. A check never overrides either. A case that differs is a separate rule, such as `OPS001` (some operators lack `op_schema`) and `OPS005` (all lack it).
 - A rule requires both halves. A TOML entry without a check never fires; a check without an entry fails at startup.
 - `x-placeholders` in `rules.schema.json` is the master list of placeholder names, each with a description.
@@ -226,9 +223,22 @@ message = "self-dependency"
 | Detection logic           | `*_rules.py` (one family per category) |
 | Placeholder names, meaning | `rules.schema.json` (`x-placeholders`) |
 | Consumer impact per gap   | `rules.toml` (`consumer_impact` on each `[[rule]]`) |
-| Evidence group and level  | `rules.toml` (`group`, `level` on each `[[rule]]`) |
-| Integrity check           | `rules.toml` (`check` on each `[[rule]]`) |
-| Remediation               | `rules.toml` (`[[remediation]]`, rule `remediation`) |
+
+### Traceability
+
+One rule ID links a Hit to its outputs.
+
+- `rule ID`: joins the Hit to its `[[rule]]` entry in `rules.toml`.
+- `consumer_impact`: joins the rule to the verdict, one value per consumer.
+- Values, best to worst: `READY`, `LIMITED`, `REVIEW`, `NOT SUITABLE`.
+- `info` and `pass` Hits lower no consumer. `fatal` stops the scan.
+- `TraceResult.status` takes the worst value per consumer across all findings.
+- The CLI and the report show the same rows: findings, then one suitability row per consumer.
+
+#### Worked Example: `TIM001`
+
+- **Hit**: `timing-absent` returns severity `warning`.
+- **Verdict**: replay `READY`, simulator `REVIEW`, analysis `NOT SUITABLE`.
 
 ### Validation
 
@@ -260,9 +270,42 @@ chakra_linter traces/ --disable-rule KIN001
 
 ### Changing a Rule
 
-- Edit wording, remediation, group, level, default state, or `exempt` patterns in `rules.toml` alone. No code change applies.
-- Add a rule by adding a `[[rule]]` entry, a `@rule("ID")` method on its family in `*_rules.py`, and a `consumer_impact` line, `group`, `level` and remediation on the rule entry in `rules.toml`. Add any new placeholder to `x-placeholders` first.
+- Edit wording, default state, or `exempt` patterns in `rules.toml` alone. No code change applies.
+- Add a rule by adding a `[[rule]]` entry, a `@rule("ID")` method on its family in `*_rules.py`, and a `consumer_impact` line on the rule entry in `rules.toml`. Add any new placeholder to `x-placeholders` first.
 - Add a family by subclassing `RuleFamily`, decorating it with `@register`, and listing it in `scan_trace`.
 - Set `severity` on the new `[[rule]]` entry. Override it on the hit only when the level varies with the data.
 - Retire a rule by leaving its ID unused. Do not reassign the ID.
 - Run the linter tests after every change to the file.
+
+## Backlog
+
+### Linter: Rule Metadata Concepts
+
+The linter dropped four concepts because the project never defined them.
+
+- Each concept needs a definition, an owner, and an output that uses it before reintroduction.
+- The removed implementation lived in `src/linter` (`rules.toml`, `rules.schema.json`, `rule_config.py`, `consumer.py`, `reports.py`).
+
+#### Group
+
+- **Intent:** assign each rule to an evidence area: `TIMING`, `KINETO`, `COMM`, `OP_SCHEMA`, `IO`, `META`, `ATTR`.
+- **Gap:** no report section grouped findings by it; the rule ID prefix already groups rules.
+- **Open question:** define how groups differ from the rule ID prefixes.
+
+#### Level
+
+- **Intent:** label how far a group falls short, such as `ABSENT`, `PARTIAL`, `UNLINKED`, `INCOMPLETE`, `NONE`.
+- **Gap:** the label did not feed any verdict. `consumer_impact` already sets the verdict.
+- **Open question:** define a closed vocabulary and the rule that picks the worst level per group.
+
+#### Check
+
+- **Intent:** mark an integrity defect (`DECODE`, `CONTENT`, `SCHEMA`, `DAG`) and report a trace-wide integrity result of `PASS` or `FAIL`.
+- **Gap:** the CLI never showed integrity. Integrity rules already set `NOT SUITABLE` for every consumer.
+- **Open question:** decide whether integrity is a separate verdict or only a rule family.
+
+#### Remediation
+
+- **Intent:** attach a next step to each finding, shared per group and level or overridden per rule.
+- **Gap:** only the report printed next steps; the CLI never did, and the text was written without review.
+- **Open question:** define the audience, the wording standard, and whether the CLI shows it.

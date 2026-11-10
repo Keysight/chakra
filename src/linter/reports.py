@@ -14,12 +14,9 @@ try:
         CONSUMER_LABELS,
         CONSUMERS,
         LIMITED,
-        NOT_APPLICABLE,
         NOT_SUITABLE,
-        PASS,
         READY,
         REVIEW,
-        SEVERITY,
         Finding,
         TraceResult,
     )
@@ -37,12 +34,9 @@ except ImportError:  # run as a top-level module, not a package
         CONSUMER_LABELS,
         CONSUMERS,
         LIMITED,
-        NOT_APPLICABLE,
         NOT_SUITABLE,
-        PASS,
         READY,
         REVIEW,
-        SEVERITY,
         Finding,
         TraceResult,
     )
@@ -56,8 +50,8 @@ except ImportError:  # run as a top-level module, not a package
     from rule_family import ERROR, INFO, WARNING  # type: ignore[no-redef]
     from sampling import SAMPLE_LIMIT  # type: ignore[no-redef]
 
-# Statuses that need no reader attention are plain; the rest are bold
-PLAIN_STATUSES = {PASS, READY, NOT_APPLICABLE}
+# A ready status needs no reader attention; the rest are bold
+PLAIN_STATUSES = {READY}
 
 
 def cell(text: str) -> str:
@@ -90,16 +84,6 @@ def trace_anchors(results: list[tuple[Path, TraceResult]]) -> list[str]:
     return anchors
 
 
-def primary_reason(result: TraceResult) -> str:
-    """Name the reason behind the worst consumer impact, with a count of the rest."""
-    statuses = [result.status(c) for c in CONSUMERS]
-    worst = max(statuses, key=lambda s: SEVERITY[s[0]])
-    if not worst[1]:
-        return "-"
-    others = {r for _, reasons in statuses for r in reasons} - {worst[1][0]}
-    return worst[1][0] + (f" (+{len(others)} more)" if others else "")
-
-
 def summary_lines(results: list[tuple[Path, TraceResult]]) -> list[str]:
     """Render one overview row per trace with an impact per consumer."""
     body = []
@@ -108,13 +92,11 @@ def summary_lines(results: list[tuple[Path, TraceResult]]) -> list[str]:
         body.append(
             [
                 f"[`{trace.name}`](#{anchor})",
-                status_cell(result.integrity()),
                 f"{result.total:,}",
             ]
             + [status_cell(impact) for impact in impacts]
-            + [primary_reason(result)]
         )
-    headers = ["Trace", "Integrity", "Nodes", *CONSUMER_LABELS, "Primary reason"]
+    headers = ["Trace", "Nodes", *CONSUMER_LABELS]
     return [
         "## Summary",
         "",
@@ -132,9 +114,6 @@ OVERVIEW = (
     "This report checks Chakra execution traces and states whether ",
     "users can rely on them for their intended work.",
     "",
-    "- **Integrity:** the linter confirms each file is readable, not empty,",
-    "  matches the Chakra schema, and forms a valid dependency graph.",
-    "  A trace that fails any of these is unusable for every purpose.",
     "- **Usability:** the linter grades each trace for three uses:",
     "  - `Replay`: re-run the recorded operations on hardware.",
     "  - `Simulator`: predict execution time from the graph.",
@@ -149,17 +128,14 @@ OVERVIEW = (
 IMPACT_LEGEND = (
     "## Impact",
     "",
-    "- **Integrity**",
-    "  - `PASS`: every integrity check passes; the uses may still have gaps.",
-    "  - `FAIL`: integrity defect; every use is `NOT SUITABLE`.",
     "- **Consumer impact** (the worst applicable gap sets the impact)",
     "  - `READY`: fully usable; no gap affects the use.",
     "  - `LIMITED`: a known gap lowers fidelity; the use still works.",
     "  - `REVIEW`: the linter cannot decide; a reviewer decides.",
-    "  - `NOT SUITABLE`: a gap rules out the use.",
+    "  - `NOT SUITABLE`: a finding rules out the use.",
     "- **Severity** (trace rows)",
-    "  - `error`: integrity defect, or a gap that makes any use `NOT SUITABLE`.",
-    "  - `warning`: any other gap.",
+    "  - `error`: a finding that makes any use `NOT SUITABLE`.",
+    "  - `warning`: any other finding.",
     "  - `pass`: no gap affects the use.",
     f"- **Sample IDs:** up to {SAMPLE_LIMIT} affected node IDs to inspect.",
     "",
@@ -245,14 +221,10 @@ def render_report(
         lines += [
             f"### `{trace.name}`",
             "",
-            f"- **Integrity:** {result.integrity()}",
             f"- **Nodes:** {result.total:,}",
             f"- **Scan time:** {result.elapsed:.2f}s",
             "",
         ]
-        steps = result.next_steps()
-        if steps:
-            lines += ["#### Next steps", "", *(f"- {s}" for s in steps), ""]
         lines += [*block(trace, result), "[Back to summary](#summary)", ""]
     lines += [*IMPACT_LEGEND, *rule_descriptions(rules, disabled)]
     return "\n".join(lines)

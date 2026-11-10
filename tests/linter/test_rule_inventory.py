@@ -63,7 +63,6 @@ def test_report_links_every_rule_to_a_description(shipped_rules) -> None:
     """Rule IDs in both report formats link to a heading in the Rules list."""
     trace = ROOT / "missing.et"
     result = linter.TraceResult()
-    result.readable = False
     result.problems = ["cannot decode"]
     result.fatal_rule = "INT001"
     for as_html in (False, True):
