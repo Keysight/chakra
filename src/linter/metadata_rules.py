@@ -12,6 +12,8 @@ except ImportError:  # run as a top-level module, not a package
 class MetadataRules(RuleFamily):
     """Missing and inconsistent capture metadata."""
 
+    order = 60
+
     # Rule IDs; each must match an entry in rules.toml
     MET001 = "MET001"  # version: required, every trace
     MET002 = "MET002"  # schema

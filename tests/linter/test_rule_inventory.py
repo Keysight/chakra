@@ -102,3 +102,21 @@ def test_every_rule_has_an_owner(shipped_rules) -> None:
 
     owned = {rule for family in rule_family.FAMILIES for rule in family.checks}
     assert owned == set(shipped_rules)
+
+
+def test_every_rules_module_registers_a_family() -> None:
+    """A *_rules.py module that registers nothing never runs in a scan."""
+    import rule_family
+
+    modules = {f.__module__ for f in rule_family.FAMILIES}
+    files = {p.stem for p in Path(linter.__file__).parent.glob("*_rules.py")}
+    assert files == modules
+
+
+def test_family_orders_are_unique_and_integrity_leads() -> None:
+    """Report order is explicit: no ties, integrity first."""
+    import rule_family
+
+    orders = [f.order for f in rule_family.FAMILIES]
+    assert len(orders) == len(set(orders))
+    assert min(rule_family.FAMILIES, key=lambda f: f.order).__name__ == "IntegrityRules"

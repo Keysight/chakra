@@ -194,6 +194,13 @@ class ReplayRules(RuleFamily):
     OPS005 = "OPS005"  # every CPU operator lacks op_schema
     OPS006 = "OPS006"  # no replayable CPU operators, synthetic trace
 
+    order = 50
+
+    @classmethod
+    def create(cls, disabled: Iterable[str], skip: Callable[[str], bool]) -> "ReplayRules":
+        """Build the family with the annotation matcher."""
+        return cls(disabled, skip)
+
     def __init__(self, disabled: Iterable[str] = (), skip: Callable[[str], bool] = lambda name: False) -> None:
         """Start empty; `skip` names childless CPU annotations needing no schema."""
         super().__init__(disabled)
@@ -217,7 +224,7 @@ class ReplayRules(RuleFamily):
         self.io_ids: dict[str, list[int]] = {}
         self.resolved = False
 
-    def add(self, node: Node, attrs: dict[str, object]) -> None:
+    def add(self, node: Node) -> None:
         """Record the schema, CPU status, and I/O of one node."""
         index, node_id = self.index, node.id
         add_sample(self.type_ids, node.type, node_id)  # type: ignore[arg-type]

@@ -86,7 +86,7 @@ def run(synthetic: bool, groups: dict[int, tuple[int, int]], disabled=frozenset(
         index.type_counts[node_type] = count
         for i in range(count):
             node_id += 1
-            family.add(Node(id=node_id, type=node_type, duration_micros=0 if i < zeros else 5), {})
+            family.add(Node(id=node_id, type=node_type, duration_micros=0 if i < zeros else 5))
     index.total = node_id
     return family.finish(index) if node_id else []
 

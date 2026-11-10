@@ -18,6 +18,8 @@ except ImportError:  # run as a top-level module, not a package
 class IntegrityRules(RuleFamily):
     """Unreadable files, empty traces, and unknown node types."""
 
+    order = 10
+
     # Rule IDs; each must match an entry in rules.toml
     INT001 = "INT001"  # file cannot be decoded
     INT002 = "INT002"  # trace holds no nodes
@@ -29,7 +31,7 @@ class IntegrityRules(RuleFamily):
         super().__init__(disabled)
         self.type_ids: dict[int, list[int]] = {}  # sample node IDs per unknown type
 
-    def add(self, node: Node, attrs: dict[str, object]) -> None:
+    def add(self, node: Node) -> None:
         """Sample the nodes of a type that the schema does not define."""
         if node.type not in NodeType.DESCRIPTOR.values_by_number:
             add_sample(self.type_ids, node.type, node.id)  # type: ignore[arg-type]

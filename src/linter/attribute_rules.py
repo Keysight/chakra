@@ -19,6 +19,8 @@ except ImportError:  # run as a top-level module, not a package
 class AttributeRules(RuleFamily):
     """Missing, mistyped, and invalid converter attributes."""
 
+    order = 70
+
     # Rule IDs; each must match an entry in rules.toml
     ATT001 = "ATT001"  # missing converter attribute
     ATT002 = "ATT002"  # attribute of unexpected type or repeated
@@ -84,7 +86,7 @@ class AttributeRules(RuleFamily):
             hits.append(self.ATT005)
         return hits
 
-    def add(self, node: Node, attrs: dict[str, object]) -> None:
+    def add(self, node: Node) -> None:
         """Record absent, mistyped, and invalid attributes of one node."""
         index, node_id = self.index, node.id
         required = self.CONVERTER_ATTRS if index.cpu_op.get(node_id, False) else ()

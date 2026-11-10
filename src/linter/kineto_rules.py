@@ -19,6 +19,8 @@ except ImportError:  # run as a top-level module, not a package
 class KinetoRules(RuleFamily):
     """Stream, duration, and parent links of device nodes; captured traces only."""
 
+    order = 80
+
     # Rule IDs; each must match an entry in rules.toml
     KIN001 = "KIN001"  # no stream attribute on any node
     KIN002 = "KIN002"  # streams present, no durations
@@ -36,7 +38,7 @@ class KinetoRules(RuleFamily):
         self.zero_ids: list[int] = []  # streamed nodes with zero duration
         self.device_parents: dict[int, tuple[int, ...]] = {}  # off the default stream
 
-    def add(self, node: Node, attrs: dict[str, object]) -> None:
+    def add(self, node: Node) -> None:
         """Record the stream, duration, and parents of one node."""
         index, node_id = self.index, node.id
         if not index.has_attr(node_id, "stream"):

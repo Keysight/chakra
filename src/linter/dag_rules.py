@@ -19,6 +19,8 @@ except ImportError:  # run as a top-level module, not a package
 class DagRules(RuleFamily):
     """Duplicate IDs, dangling, self and repeated dependencies, cycles."""
 
+    order = 20
+
     # Rule IDs; each must match an entry in rules.toml
     DAG001 = "DAG001"  # duplicate node ID
     DAG002 = "DAG002"  # dependency on a missing node
@@ -57,8 +59,11 @@ class DagRules(RuleFamily):
         self.dup_edges = 0
         self.dup_edge_ids: list[int] = []
 
-    def add(self, node: Node, attrs: dict[str, object]) -> None:
+    def add(self, node: Node) -> None:
         """Count a node that lists itself or repeats a parent in one field."""
+        # A node with no dependencies breaks neither rule
+        if not (node.ctrl_deps or node.data_deps):
+            return
         node_id = node.id
         if self.DAG003 in self.enabled and (node_id in node.ctrl_deps or node_id in node.data_deps):
             self.self_refs += 1

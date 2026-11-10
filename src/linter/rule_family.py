@@ -58,11 +58,17 @@ class RuleFamily:
     Rule text, names and enabled state come from `rules.toml`. Methods marked
     with `@rule` are the checks; `finish` dispatches enabled rules by ID. The
     builder calls `add` once per node, then `finish` once. A family keeps its
-    own counters and never retains `node` or `attrs`.
+    own counters and never retains `node`.
     """
 
     # Rule ID to check method name, in report order; built per subclass
     checks: dict[str, str] = {}
+
+    # Report position among families; lower runs first, integrity first
+    order: int = 100
+
+    # Node types `add` needs; None means every node. Others skip the call.
+    node_types: frozenset[int] | None = None
 
     # Shared index, bound by the builder; holds the facts of the current node
     index: "TraceIndex"
@@ -91,8 +97,18 @@ class RuleFamily:
             raise RuleConfigError(f"{type(self).__name__}: rules missing from rules.toml: {', '.join(missing)}")
         self.enabled = frozenset(self.checks) - frozenset(disabled)
 
-    def add(self, node: Node, attrs: dict[str, object]) -> None:
-        """Update accumulators from one node; `attrs` maps name to value."""
+    @classmethod
+    def reads_nodes(cls) -> bool:
+        """Tell whether the family overrides `add`; no-op families skip it."""
+        return cls.add is not RuleFamily.add
+
+    @classmethod
+    def create(cls, disabled: Iterable[str], skip: Callable[[str], bool]) -> "RuleFamily":
+        """Build the family for a scan; override to take `skip`."""
+        return cls(disabled)
+
+    def add(self, node: Node) -> None:
+        """Update accumulators from one node."""
 
     def finish(self, index: "TraceIndex") -> list[Hit]:
         """Run each enabled rule's check over the shared index."""
@@ -118,3 +134,8 @@ def register(cls: type[FamilyT]) -> type[FamilyT]:
         raise TypeError(f"{cls.__name__} reuses rule IDs {', '.join(clash)}")
     FAMILIES.append(cls)
     return cls
+
+
+def build_families(disabled: Iterable[str], skip: Callable[[str], bool]) -> list[RuleFamily]:
+    """Instantiate every registered family in report order."""
+    return [family.create(disabled, skip) for family in sorted(FAMILIES, key=lambda f: f.order)]

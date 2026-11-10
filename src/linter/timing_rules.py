@@ -33,6 +33,8 @@ CHECKED_TYPES = {
 class TimingRules(RuleFamily):
     """Absent, partial, and unknown durations."""
 
+    order = 30
+
     # Rule IDs; each must match an entry in rules.toml
     TIM001 = "TIM001"  # no node has a duration
     TIM002 = "TIM002"  # some nodes lack a duration
@@ -46,7 +48,7 @@ class TimingRules(RuleFamily):
         self.zero_ids: list[int] = []
         self.zero_type_ids: dict[int, list[int]] = {}
 
-    def add(self, node: Node, attrs: dict[str, object]) -> None:
+    def add(self, node: Node) -> None:
         """Count a node with zero duration, in total and by node type."""
         if node.duration_micros == 0:
             self.zero += 1

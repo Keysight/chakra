@@ -111,19 +111,19 @@ sequenceDiagram
     Note over CFG: EXTEND 1: add a [[rule]] entry in rules.toml<br/>and any new placeholder in rules.schema.json
     end
 
-    CLI->>FAM: instantiate families (disabled IDs)
+    CLI->>FAM: build_families() in order, one per registered family
     FAM->>CFG: shipped_rules() checks every @rule ID exists
 
     rect rgb(255, 224, 178)
-    Note over FAM: EXTEND 2: add an @rule("ID") method to a family,<br/>or a new @register RuleFamily subclass,<br/>then list it in scan_trace
+    Note over FAM: EXTEND 2: add an @rule("ID") method to a family,<br/>or a new @register RuleFamily subclass<br/>with a unique order, and scan_trace picks it up
     end
 
     CLI->>IDX: IndexBuilder(path, families).build()
 
     loop once per node (the only read of the file)
         IDX->>IDX: decode node, fill TraceIndex facts
-        IDX->>FAM: add(node, attrs)
-        Note over FAM: update counters and samples only,<br/>never retain node or attrs
+        IDX->>FAM: add(node), only for the node types it declares
+        Note over FAM: update counters and samples only,<br/>never retain node
     end
 
     rect rgb(255, 224, 178)
@@ -161,7 +161,7 @@ sequenceDiagram
 
 - `add` runs once per node; keep only counters, samples, and scalars.
 - `finish` runs once after the pass; resolve cross-node checks there.
-- A family never retains `node` or `attrs`.
+- A family never retains `node`.
 
 ## Rule Configuration (`rules.toml`)
 
@@ -272,7 +272,9 @@ chakra_linter traces/ --disable-rule KIN001
 
 - Edit wording, default state, or `exempt` patterns in `rules.toml` alone. No code change applies.
 - Add a rule by adding a `[[rule]]` entry, a `@rule("ID")` method on its family in `*_rules.py`, and a `consumer_impact` line on the rule entry in `rules.toml`. Add any new placeholder to `x-placeholders` first.
-- Add a family by subclassing `RuleFamily`, decorating it with `@register`, and listing it in `scan_trace`.
+- Add a family by subclassing `RuleFamily`, decorating it with `@register`, and setting a unique `order`. `scan_trace` builds every registered family in `order`; no list to edit.
+- Import the new `*_rules.py` module in `linter.py` so the decorator runs. A test fails when a module registers no family.
+- Override `create` only when the family needs more than `disabled`, as `ReplayRules` does.
 - Set `severity` on the new `[[rule]]` entry. Override it on the hit only when the level varies with the data.
 - Retire a rule by leaving its ID unused. Do not reassign the ID.
 - Run the linter tests after every change to the file.

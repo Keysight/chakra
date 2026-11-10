@@ -31,6 +31,9 @@ INT_ATTRS = ("rf_id", "scope", "fw_tid", "fw_parent", "comm_size")
 # Attributes only PyTorch-derived traces carry; synthetic traces lack them
 PYTORCH_ATTRS = ("rf_id", "tid")
 
+# Attributes whose values the index stores
+TRACKED_ATTRS = frozenset(("stream", "is_cpu_op", "op_schema", *INT_ATTRS))
+
 # Chakra attributes carry one populated value field, named by `value`
 IS_CPU_OP = "is_cpu_op"
 OP_SCHEMA = "op_schema"
@@ -100,9 +103,11 @@ class IndexBuilder:
         """
         self.on_progress = on_progress
         self.attr_kinds = attr_kinds or {}
-        self.families = tuple(families)
+        self.families = tuple(f for f in families if f.reads_nodes())
+        # Families to call per node type; filled on first sight of a type
+        self.dispatch: dict[int, tuple[RuleFamily, ...]] = {}
         self.index = TraceIndex(path=path, file_name=path.name)
-        for family in self.families:
+        for family in families:
             family.index = self.index
 
     @property
@@ -221,43 +226,60 @@ class IndexBuilder:
         index.duration[node_id] = node.duration_micros
         # Intern names so repeated operators share one string object
         index.name[node_id] = sys.intern(node.name)
-        index.ctrl_deps[node_id] = tuple(node.ctrl_deps)
-        index.data_deps[node_id] = tuple(node.data_deps)
+        # Most nodes have no dependencies; skip building a tuple for them
+        ctrl, data = node.ctrl_deps, node.data_deps
+        index.ctrl_deps[node_id] = tuple(ctrl) if ctrl else ()
+        index.data_deps[node_id] = tuple(data) if data else ()
         # One pass over attributes: presence bits plus the few values rules read
         index.attr_mask[node_id] = self._add_attrs(node)
-        if self.families:
-            attrs = {attr.name: _value(attr) for attr in node.attr}
-            for family in self.families:
-                family.add(node, attrs)
+        families = self.dispatch.get(node.type)
+        if families is None:
+            families = self.dispatch[node.type] = tuple(
+                f for f in self.families if f.node_types is None or node.type in f.node_types
+            )
+        for family in families:
+            family.add(node)
 
     def _add_attrs(self, node: Node) -> int:
         """Record attribute facts of one node; return its presence mask."""
         index = self.index
         node_id = node.id
         mask = 0
-        seen: set[str] = set()
+        names: set[str] = set()
         bad = pytorch = False
+        kinds, bits = self.attr_kinds, index.attr_bits
         for attr in node.attr:
             name = attr.name
             pytorch |= name in PYTORCH_ATTRS
-            bit = index.attr_bits.setdefault(name, len(index.attr_bits))
+            bit = bits.get(name)
+            if bit is None:
+                bit = bits[name] = len(bits)
             mask |= 1 << bit
-            bad |= name in seen
-            seen.add(name)
-            kind = attr.WhichOneof("value")
-            bad |= name in self.attr_kinds and kind != self.attr_kinds[name]
-            if name == STREAM:
-                index.stream[node_id] = attr.int64_val
-            elif name == IS_CPU_OP:
-                index.cpu_op[node_id] = bool(_value(attr))
-            elif name == OP_SCHEMA and _value(attr):  # empty schema is absent
-                index.op_schema[node_id] = sys.intern(str(_value(attr)))
-            if name in INT_ATTRS and kind == "int64_val":
-                index.int_attrs.setdefault(name, {})[node_id] = attr.int64_val
+            names.add(name)
+            # Read the value kind only for attributes that a rule checks
+            if name in kinds:
+                bad |= attr.WhichOneof("value") != kinds[name]
+            if name in TRACKED_ATTRS:
+                self._track(node_id, name, attr)
+        # A repeated name shrinks the set below the attribute count
+        bad |= len(names) != len(node.attr)
         if bad:
             index.bad_attr.add(node_id)
         index.pytorch_nodes += pytorch
         return mask
+
+    def _track(self, node_id: int, name: str, attr: object) -> None:
+        """Store the value of an attribute that rules read."""
+        index = self.index
+        if name == STREAM:
+            index.stream[node_id] = attr.int64_val  # type: ignore[attr-defined]
+        elif name == IS_CPU_OP:
+            index.cpu_op[node_id] = bool(_value(attr))
+        elif name == OP_SCHEMA:
+            if _value(attr):  # empty schema is absent
+                index.op_schema[node_id] = sys.intern(str(_value(attr)))
+        elif attr.WhichOneof("value") == "int64_val":  # type: ignore[attr-defined]
+            index.int_attrs.setdefault(name, {})[node_id] = attr.int64_val  # type: ignore[attr-defined]
 
 
 def _value(attr: object) -> object:

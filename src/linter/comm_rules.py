@@ -19,6 +19,8 @@ except ImportError:  # run as a top-level module, not a package
 class CommRules(RuleFamily):
     """Missing communication attributes, zero sizes, default-stream collectives."""
 
+    order = 40
+
     # Rule IDs; each must match an entry in rules.toml
     COM001 = "COM001"  # missing comm_type
     COM002 = "COM002"  # missing comm_size
@@ -37,6 +39,7 @@ class CommRules(RuleFamily):
 
     # Report order of node types
     TYPE_ORDER = (COMM_COLL_NODE, *P2P_TYPES)
+    node_types = frozenset(TYPE_ORDER)
 
     def __init__(self, disabled: Iterable[str] = ()) -> None:
         """Start with no communication defects."""
@@ -48,7 +51,7 @@ class CommRules(RuleFamily):
         self.coll_default = 0
         self.default_ids: list[int] = []
 
-    def add(self, node: Node, attrs: dict[str, object]) -> None:
+    def add(self, node: Node) -> None:
         """Record missing attributes and zero sizes of one communication node."""
         node_type, node_id, index = node.type, node.id, self.index
         if node_type not in self.TYPE_ORDER:
