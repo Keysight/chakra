@@ -221,7 +221,7 @@ severity = "error"
 message = "self-dependency"
 ```
 
-- The ID prefix groups rules by area: `INT`, `DAG`, `TIM`, `KIN`, `COM`, `OPS`, `IO`, `MET`, `ATT`.
+- The ID prefix groups rules by area: `INT`, `DAG`, `TIM`, `KIN`, `COM`, `STO`, `OPS`, `IO`, `MET`, `ATT`.
 - IDs stay stable and are never reused for a different rule.
 - Placeholders are limited per rule. The loader rejects a message that names a value its check does not supply.
 

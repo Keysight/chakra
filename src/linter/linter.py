@@ -16,6 +16,7 @@ try:
         dag_rules,  # noqa: F401  (registers its family)
         kineto_rules,  # noqa: F401  (registers its family)
         metadata_rules,  # noqa: F401  (registers its family)
+        storage_rules,  # noqa: F401  (registers its family)
         timing_rules,  # noqa: F401  (registers its family)
     )
     from .attribute_rules import AttributeRules
@@ -37,6 +38,7 @@ except ImportError:  # run as a top-level module, not a package
     import dag_rules  # noqa: F401  (registers its family)
     import kineto_rules  # noqa: F401  (registers its family)
     import metadata_rules  # noqa: F401  (registers its family)
+    import storage_rules  # noqa: F401  (registers its family)
     import timing_rules  # noqa: F401  (registers its family)
     from attribute_rules import AttributeRules  # type: ignore[no-redef]
     from consumer import (  # type: ignore[no-redef]

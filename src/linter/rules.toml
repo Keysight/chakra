@@ -341,6 +341,116 @@ severity = "error"
 message = "comm_type is not a defined collective type"
 consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "REVIEW" }
 
+# Storage
+
+[[rule]]
+id = "STO001"
+name = "sto-missing-info"
+description = "A storage node carries no StorageInfo. The storage level and operation are unknown, so replay and simulation cannot tell which storage operation to run."
+enabled = true
+severity = "error"
+message = "storage node without StorageInfo"
+consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "REVIEW" }
+
+[[rule]]
+id = "STO002"
+name = "sto-payload-mismatch"
+description = "A node carries an op_info payload that does not belong to its type, such as storage detail on a node that is not a storage node. Consumers read the type and the payload differently, so the node is ambiguous."
+enabled = true
+severity = "error"
+message = "op_info payload does not fit the node type"
+consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "REVIEW" }
+
+[[rule]]
+id = "STO003"
+name = "sto-unknown-level"
+description = "A storage node has an unknown or undefined storage level. Consumers cannot tell the layer of the storage stack that the operation targets."
+enabled = true
+severity = "error"
+message = "storage level is unknown or undefined"
+consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "REVIEW" }
+
+[[rule]]
+id = "STO004"
+name = "sto-detail-mismatch"
+description = "The detail of a storage node does not match its level: a file, page or block level lacks its own detail message, carries another one, or a device level carries a typed detail. Consumers cannot read the operation fields."
+enabled = true
+severity = "error"
+message = "storage detail does not match the storage level"
+consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "REVIEW" }
+
+[[rule]]
+id = "STO005"
+name = "sto-unknown-op"
+description = "A file, page or block operation has an unknown or undefined operation type. Replay and simulation cannot tell which operation to run."
+enabled = true
+severity = "error"
+message = "storage operation type is unknown or undefined"
+consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "REVIEW" }
+
+[[rule]]
+id = "STO006"
+name = "sto-open-no-path"
+description = "A file open operation has no pathname. Replay cannot open the file, and analysis cannot attribute later operations to it."
+enabled = true
+severity = "warning"
+message = "file open without pathname"
+consumer_impact = { replay = "REVIEW", simulator = "REVIEW", analysis = "REVIEW" }
+
+[[rule]]
+id = "STO007"
+name = "sto-zero-size"
+description = "A file read, write, pread or pwrite operation transfers zero bytes. The operation adds no storage traffic to replay or simulation, and the size may be missing."
+enabled = true
+severity = "warning"
+message = "file data operation of zero bytes"
+consumer_impact = { replay = "REVIEW", simulator = "REVIEW", analysis = "REVIEW" }
+
+[[rule]]
+id = "STO008"
+name = "sto-block-no-device"
+description = "A block-layer operation names no device. Analysis cannot attribute the traffic to a device, and replay cannot target one."
+enabled = true
+severity = "warning"
+message = "block operation without device"
+consumer_impact = { replay = "REVIEW", simulator = "REVIEW", analysis = "REVIEW" }
+
+[[rule]]
+id = "STO009"
+name = "sto-block-zero-sectors"
+description = "A block read or write operation covers zero sectors. A flush carries no payload and does not count. The operation adds no storage traffic, and the size may be missing."
+enabled = true
+severity = "warning"
+message = "block data operation of zero sectors"
+consumer_impact = { replay = "REVIEW", simulator = "REVIEW", analysis = "REVIEW" }
+
+[[rule]]
+id = "STO010"
+name = "sto-block-unknown-event"
+description = "A block-layer operation has an unknown or undefined queue event. Analysis cannot place the operation in the request lifecycle (queue, get, insert, dispatch, complete)."
+enabled = true
+severity = "warning"
+message = "block queue event is unknown or undefined"
+consumer_impact = { replay = "READY", simulator = "READY", analysis = "REVIEW" }
+
+[[rule]]
+id = "STO011"
+name = "sto-page-zero-pages"
+description = "A page-cache operation covers zero pages. The operation adds no page traffic, and nr_pages may be missing."
+enabled = true
+severity = "warning"
+message = "page operation of zero pages"
+consumer_impact = { replay = "READY", simulator = "REVIEW", analysis = "REVIEW" }
+
+[[rule]]
+id = "STO012"
+name = "sto-data-op-undefined"
+description = "A data operation node (dataloader, checkpoint or key-value transfer) lacks its data_op or sets DATA_OP_UNKNOWN. Consumers cannot tell what the node does to storage."
+enabled = true
+severity = "error"
+message = "data operation node without a defined data_op"
+consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "REVIEW" }
+
 # Operators
 
 [[rule]]
