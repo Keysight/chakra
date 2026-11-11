@@ -73,7 +73,7 @@ def test_family_owns_the_timing_rules(rule) -> None:
 OTHER = 99  # a node type outside CHECKED_TYPES
 
 
-def run(synthetic: bool, groups: dict[int, tuple[int, int]], disabled=frozenset()) -> list:
+def run(synthetic: bool, groups: dict[int, tuple[int, int]], disabled: frozenset[str] = frozenset()) -> list:
     """Feed {type: (nodes, zero-duration nodes)} to the family; return hits."""
     family = TimingRules(disabled)
     index = TraceIndex(header={} if synthetic else {"pid": 1})
@@ -160,5 +160,5 @@ def test_at_most_one_trace_level_hit() -> None:
 def test_disabled_rule_emits_nothing_and_changes_no_other(off) -> None:
     for synthetic in (False, True):
         for groups in shapes({COMP_NODE: [0, 1, 2, 3], COMM_COLL_NODE: [0, 1, 2, 3]}):
-            hits = {(h.rule, h.node_type) for h in run(synthetic, groups, {off})}
+            hits = {(h.rule, h.node_type) for h in run(synthetic, groups, frozenset({off}))}
             assert hits == {h for h in spec(synthetic, groups) if h[0] != off}, (off, groups)

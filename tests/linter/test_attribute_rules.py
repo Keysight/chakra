@@ -11,7 +11,7 @@ CPU = {"is_cpu_op": True, "rf_id": 1, "fw_parent": 1, "seq_id": 1, "scope": 1, "
 CPU["op_schema"] = "aten::add() -> Tensor"
 
 
-def hits_of(nodes: list) -> dict[str, tuple]:
+def hits_of(nodes: list) -> dict[tuple[str, str | None], tuple]:
     """Run the family; return {rule: (count, sample ids)}."""
     hits, _ = run(AttributeRules(), nodes)
     return {(h.rule, h.values.get("name")): (h.values["count"], h.ids) for h in hits}

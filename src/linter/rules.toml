@@ -48,7 +48,7 @@ consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysi
 [[rule]]
 id = "INT003"
 name = "schema-unknown-type"
-description = "A node carries a type that the installed mlc-chakra schema does not define. The trace likely comes from a newer or foreign schema, so consumers may misread it."
+description = "A node carries a type that the installed mlc-chakra schema does not define. The trace likely comes from a newer or foreign schema. Consumers may misread the node, so no consumer is suitable."
 enabled = true
 severity = "error"
 message = "node type {type} not in Chakra schema version {version}"
@@ -77,7 +77,7 @@ consumer_impact = { replay = "REVIEW", simulator = "REVIEW", analysis = "REVIEW"
 [[rule]]
 id = "MET002"
 name = "meta-missing-schema"
-description = "The global metadata of a PyTorch-derived trace lacks the schema attribute that the Chakra converter writes. The capture is harder to identify or date, so reviewers may not trace its origin."
+description = "The global metadata of a PyTorch-derived trace lacks the schema attribute, the version string of the PyTorch execution trace format (for example 1.1.1-chakra.0.0.4). The Chakra converter copies it from the host trace header. Reviewers cannot confirm which format produced the capture."
 enabled = true
 severity = "warning"
 message = "global metadata lacks {name} attribute"
@@ -86,7 +86,7 @@ consumer_impact = { replay = "REVIEW", simulator = "REVIEW", analysis = "REVIEW"
 [[rule]]
 id = "MET003"
 name = "meta-missing-pid"
-description = "The global metadata of a PyTorch-derived trace lacks the pid attribute that the Chakra converter writes. The capture is harder to identify or date, so reviewers may not trace its origin."
+description = "The global metadata of a PyTorch-derived trace lacks the pid attribute, the process ID of the captured program. The Chakra converter copies it from the host trace header; the Kineto device trace carries the same pid. Analysis cannot tie the capture to its source process. Replay and simulation do not use it."
 enabled = true
 severity = "warning"
 message = "global metadata lacks {name} attribute"
@@ -95,7 +95,7 @@ consumer_impact = { replay = "READY", simulator = "READY", analysis = "LIMITED" 
 [[rule]]
 id = "MET004"
 name = "meta-missing-time"
-description = "The global metadata of a PyTorch-derived trace lacks the time attribute that the Chakra converter writes. The capture is harder to identify or date, so reviewers may not trace its origin."
+description = "The global metadata of a PyTorch-derived trace lacks the time attribute, the wall-clock date and time of the capture (for example 2026-11-03 09:49:39). The Chakra converter copies it from the host trace header. Analysis cannot place the capture in time. Replay and simulation do not use it."
 enabled = true
 severity = "warning"
 message = "global metadata lacks {name} attribute"
@@ -104,7 +104,7 @@ consumer_impact = { replay = "READY", simulator = "READY", analysis = "LIMITED" 
 [[rule]]
 id = "MET005"
 name = "meta-missing-start-ts"
-description = "The global metadata of a PyTorch-derived trace lacks the start_ts attribute that the Chakra converter writes. The capture is harder to identify or date, so reviewers may not trace its origin."
+description = "The global metadata of a PyTorch-derived trace lacks the start_ts attribute, the start of the capture window in microseconds on the profiler clock. The Chakra converter copies it from the host trace header. Analysis cannot compute the capture duration. MET007 checks the order of start_ts and finish_ts."
 enabled = true
 severity = "warning"
 message = "global metadata lacks {name} attribute"
@@ -113,7 +113,7 @@ consumer_impact = { replay = "READY", simulator = "READY", analysis = "LIMITED" 
 [[rule]]
 id = "MET006"
 name = "meta-missing-finish-ts"
-description = "The global metadata of a PyTorch-derived trace lacks the finish_ts attribute that the Chakra converter writes. The capture is harder to identify or date, so reviewers may not trace its origin."
+description = "The global metadata of a PyTorch-derived trace lacks the finish_ts attribute, the end of the capture window in microseconds on the profiler clock. The Chakra converter copies it from the host trace header. Analysis cannot compute the capture duration. MET007 checks the order of start_ts and finish_ts."
 enabled = true
 severity = "warning"
 message = "global metadata lacks {name} attribute"
@@ -140,7 +140,7 @@ consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysi
 [[rule]]
 id = "DAG002"
 name = "dag-dangling-dep"
-description = "A node depends on an ID that no node carries. The rule checks every ID in both ctrl_deps and data_deps. Dependency 0 is excluded because it marks a root node. The count is the number of dangling dependencies. The missing parent breaks execution order."
+description = "A node depends on an ID that no node carries. The rule checks every ID in both ctrl_deps and data_deps. Dependency 0 is excluded because it marks a root node. The report shows the number of dangling dependencies. The missing parent breaks execution order."
 enabled = true
 severity = "error"
 message = "node references a missing node"
@@ -158,7 +158,7 @@ consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysi
 [[rule]]
 id = "DAG004"
 name = "dag-duplicate-dep"
-description = "A node repeats the same parent within ctrl_deps or within data_deps. The same parent once in each field is valid. A repeat signals a generator defect that the cycle check tolerates."
+description = "A node repeats the same parent within ctrl_deps or within data_deps. The same parent once in each field is valid. The cycle check (DAG005) accepts a repeat, so the defect would pass unnoticed. A repeat signals a generator defect."
 enabled = true
 severity = "error"
 message = "repeated dependency ID within ctrl_deps or within data_deps"
@@ -178,25 +178,25 @@ consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysi
 [[rule]]
 id = "TIM001"
 name = "timing-absent"
-description = "Most or all nodes, or every node of a checked type, have zero duration. The merge of host and device data likely did not complete. Analysis cannot use the trace, and the simulator needs review."
+description = "Timing is absent. More than 50% of all nodes have zero duration, or every node of one checked type does (compute, collective, send or receive). The merge of host and device data likely did not complete. Analysis cannot use the trace, and the simulator needs review."
 enabled = true
 severity = "warning"
-message = "zero duration"
+message = "zero duration; timing absent"
 consumer_impact = { replay = "READY", simulator = "REVIEW", analysis = "NOT SUITABLE" }
 
 [[rule]]
 id = "TIM002"
 name = "timing-partial"
-description = "A share of nodes between 5% and 50% have zero duration. Healthy traces stay below 5%. Analysis fidelity drops, while replay and simulation still work."
+description = "Timing is partial. Between 5% and 50% of all nodes have zero duration; healthy traces stay at or below 5%. Analysis fidelity drops, while replay and simulation still work."
 enabled = true
 severity = "warning"
-message = "zero duration"
+message = "zero duration; timing partial"
 consumer_impact = { replay = "READY", simulator = "READY", analysis = "LIMITED" }
 
 [[rule]]
 id = "TIM003"
 name = "synthetic-timing-unknown"
-description = "A generated trace has zero duration on every node. The linter cannot tell whether the generator models durations, so a reviewer decides whether analysis applies."
+description = "A synthetic (generated) trace has zero duration on every node. The linter cannot tell whether the generator models durations, so a reviewer decides whether analysis applies."
 enabled = true
 severity = "warning"
 message = "zero duration on all nodes; modeled values unknown"
@@ -210,7 +210,7 @@ name = "kineto-no-stream"
 description = "No node has a stream attribute. The trace holds no device data, so the host trace was not linked to the Kineto device trace. A genuine CPU-only capture also triggers this rule; disable it for such traces."
 enabled = true
 severity = "error"
-message = "no node has a stream attribute (no device data)"
+message = "no node has a stream attribute (no device data); disable KIN001 for CPU-only captures"
 consumer_impact = { replay = "READY", simulator = "REVIEW", analysis = "NOT SUITABLE" }
 
 [[rule]]
@@ -225,7 +225,7 @@ consumer_impact = { replay = "READY", simulator = "REVIEW", analysis = "NOT SUIT
 [[rule]]
 id = "KIN003"
 name = "kineto-orphan"
-description = "A device node, on a stream other than 0, has no host parent in the trace, while some nodes carry durations. The link between host operator and device kernel is lost. KIN005 covers a trace without durations."
+description = "A device node (a GPU operation on a stream other than 0) has no host parent in the trace, so it is an orphan, while some nodes carry durations. The link between host operator and device kernel is lost. KIN005 covers a trace without durations."
 enabled = true
 severity = "warning"
 message = "device node has no host parent"
@@ -243,7 +243,7 @@ consumer_impact = { replay = "READY", simulator = "LIMITED", analysis = "LIMITED
 [[rule]]
 id = "KIN005"
 name = "kineto-orphan-untimed"
-description = "A device node, on a stream other than 0, has no host parent, and no node carries a duration. The link between host operator and device kernel is lost, and the device data holds no timing. KIN003 covers a trace with durations."
+description = "A device node (a GPU operation on a stream other than 0) has no host parent, so it is an orphan, and no node carries a duration. The link between host operator and device kernel is lost, and the device data holds no timing. KIN003 covers a trace with durations."
 enabled = true
 severity = "error"
 message = "device node has no host parent and no node has a duration"
@@ -263,7 +263,7 @@ consumer_impact = { replay = "READY", simulator = "REVIEW", analysis = "NOT SUIT
 [[rule]]
 id = "COM001"
 name = "comm-no-device-data"
-description = "The trace holds host-side communication operators (record_param_comms) but no device-side communication node. The communications ran, but the Kineto device data for them is absent. The communication type, size and process group are therefore missing, so replay and simulation cannot model the communications, and analysis cannot attribute their execution time."
+description = "The trace holds host-side communication operators (record_param_comms) but no device-side communication node, so the Kineto device data for them is absent. The communication type, size and process group are missing. Replay and simulation cannot model the communications, and analysis cannot attribute their execution time."
 enabled = true
 severity = "error"
 message = "{count} host-side communication operators, no device-side communication node"
@@ -290,7 +290,7 @@ consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysi
 [[rule]]
 id = "COM004"
 name = "comm-missing-pg-name"
-description = "A collective node lacks the pg_name attribute so it is assumed that the all nodes participate using a single process group."
+description = "A collective node lacks the pg_name attribute, which names its process group. Consumers assume that all nodes participate in a single process group, so a run with several groups may be modeled incorrectly."
 enabled = true
 severity = "warning"
 message = "missing pg_name attr"
@@ -328,12 +328,13 @@ consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysi
 [[rule]]
 id = "OPS001"
 name = "op-schema-missing"
-description = "A CPU node that replay would need to call has no op_schema, while other CPU nodes have one. Replay starts at the outermost CPU node that carries an op_schema, runs it with its whole subtree, and moves on to the next such node. A node without an op_schema is a wrapper when it has children, and replay looks at its children. A childless node without an op_schema, outside any replayed subtree and not matching an exempt pattern, has nothing to call. The rule reports one finding per operator name, derived from the name (namespace, else leading words), so new operators appear without a rule change."
+description = "Some CPU operators have no op_schema (the PyTorch operator signature that replay calls), while others do. A replay unit is the outermost CPU node with an op_schema, run with its whole subtree. A node without an op_schema that has children acts as a wrapper, and replay moves to its children. A childless node without an op_schema, outside any replay unit and not matching an exempt pattern, has nothing to call. The report holds one finding per operator family, the name group derived from the node name (namespace, else leading words), so new operators appear without a rule change. OPS005 covers a trace where no operator has an op_schema."
 enabled = true
 severity = "warning"
 message = "CPU operators named {family} have no op_schema; replay cannot call them"
 consumer_impact = { replay = "REVIEW", simulator = "READY", analysis = "READY" }
-# Shell-style name patterns of childless annotations that need no op_schema
+# Shell-style name patterns of childless annotations and framework wrappers
+# that mark regions or run through a parent operator; replay never calls them
 exempt = [
     "record_param_comms",
     "nccl:*",
@@ -365,8 +366,8 @@ exempt = [
 
 [[rule]]
 id = "OPS002"
-name = "op-schema-missing-kernel"
-description = "Informational note, no level change. GPU compute nodes without op_schema, listed per kernel family derived from the kernel name. Replay runs the CPU operator that launches the kernel, so the kernel needs no schema."
+name = "op-schema-kernel-note"
+description = "Informational note that changes no impact. GPU compute nodes have no op_schema, listed per kernel family derived from the kernel name. Replay runs the CPU operator that launches the kernel, so a kernel needs no schema."
 enabled = true
 severity = "pass"
 message = "GPU kernels named {family} have no op_schema; replay runs the CPU operator that launches them"
@@ -393,10 +394,10 @@ consumer_impact = { replay = "READY", simulator = "NOT SUITABLE", analysis = "RE
 [[rule]]
 id = "OPS005"
 name = "op-schema-none"
-description = "Every CPU node that replay would need to call lacks an op_schema, so replay cannot map any operator to a PyTorch call. OPS001 covers the case where some operators have one. The rule reports one finding per operator name."
+description = "No CPU node that replay would need to call has an op_schema (the PyTorch operator signature), so replay cannot map any operator to a PyTorch call. OPS001 covers a trace where some operators have one. The report holds one finding per operator family."
 enabled = true
 severity = "error"
-message = "CPU operators named {family} have no op_schema; no operator has one"
+message = "CPU operators named {family} have no op_schema; no operator in the trace has one"
 consumer_impact = { replay = "NOT SUITABLE", simulator = "READY", analysis = "READY" }
 
 [[rule]]
@@ -422,7 +423,7 @@ consumer_impact = { replay = "NOT SUITABLE", simulator = "READY", analysis = "RE
 [[rule]]
 id = "IO002"
 name = "io-schema-arity"
-description = "A replay unit records a number of inputs that differs from the argument count of its op_schema. Replay may pass the wrong arguments, so a reviewer decides."
+description = "A replay unit (a CPU node that replay calls) records a number of inputs that differs from the argument count of its op_schema. Replay may pass the wrong arguments, so a reviewer compares the recorded inputs with the schema."
 enabled = true
 severity = "warning"
 message = "CPU operators with input count differing from op_schema"
@@ -431,7 +432,7 @@ consumer_impact = { replay = "REVIEW", simulator = "READY", analysis = "READY" }
 [[rule]]
 id = "IO003"
 name = "io-cpu-missing"
-description = "A replay unit has an op_schema that expects arguments, but records no inputs and no outputs. Replay has no tensors to pass, so a reviewer decides."
+description = "A replay unit has an op_schema that expects arguments, but records no inputs and no outputs. Replay has no tensors to pass, so a reviewer confirms whether the operator needs tensors."
 enabled = true
 severity = "warning"
 message = "CPU operators with op_schema but no I/O"
@@ -451,7 +452,7 @@ consumer_impact = { replay = "REVIEW", simulator = "READY", analysis = "REVIEW" 
 [[rule]]
 id = "ATT002"
 name = "attr-unexpected-type"
-description = "A node carries a known attribute with a value type that readers do not expect, such as stream as uint64, or repeats an attribute name. Readers read the expected field and see a default value instead of the stored one."
+description = "A node carries a known attribute with a value type that readers do not expect, such as stream as uint64, or the node repeats an attribute name. Readers read the expected field and see a default value instead of the stored one."
 enabled = true
 severity = "warning"
 message = "attribute of unexpected type or repeated attribute name"
@@ -469,7 +470,7 @@ consumer_impact = { replay = "REVIEW", simulator = "READY", analysis = "REVIEW" 
 [[rule]]
 id = "ATT004"
 name = "attr-invalid-scope"
-description = "A node of a PyTorch-derived trace has a scope outside the RecordScope values 0 to 9. The NUM_SCOPES sentinel is not a scope. Readers cannot classify the node, such as forward, backward or user annotation."
+description = "A node of a PyTorch-derived trace has a scope outside the RecordScope values 0 to 9. RecordScope is the PyTorch enum that classifies a node, such as forward, backward or user annotation. The NUM_SCOPES sentinel is not a scope. Readers cannot classify the node."
 enabled = true
 severity = "warning"
 message = "scope outside 0 to 9"
@@ -478,7 +479,7 @@ consumer_impact = { replay = "REVIEW", simulator = "READY", analysis = "REVIEW" 
 [[rule]]
 id = "ATT005"
 name = "attr-backward-link"
-description = "A node of a PyTorch-derived trace has a non-zero fw_tid but a fw_parent of 0. A backward node names its forward thread but no forward parent, so readers cannot pair it with the forward node."
+description = "A node of a PyTorch-derived trace has a non-zero fw_tid (forward thread ID) but a fw_parent (forward parent node ID) of 0. A backward node names its forward thread but no forward parent, so readers cannot pair it with the forward node."
 enabled = true
 severity = "warning"
 message = "fw_tid set but fw_parent 0"
