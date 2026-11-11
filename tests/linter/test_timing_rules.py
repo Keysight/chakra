@@ -5,20 +5,16 @@ from pathlib import Path
 
 import linter
 import pytest
-from chakra.schema.protobuf.et_def_pb2 import COMM_COLL_NODE, COMP_NODE, AttributeProto, GlobalMetadata, Node
-from chakra.src.third_party.utils.protolib import encodeMessage
+from chakra.schema.protobuf.et_def_pb2 import COMM_COLL_NODE, COMP_NODE, Node
+from families import node, write_trace
 from index_builder import TraceIndex
 from timing_rules import CHECKED_TYPES, TimingRules
 
 
 def trace(path: Path, durations: list[tuple[int, int]], captured: bool = True) -> Path:
     """Write nodes from (type, duration) pairs; captured traces get a header."""
-    with path.open("wb") as handle:
-        attrs = [AttributeProto(name="pid", uint64_val=1)] if captured else []
-        encodeMessage(handle, GlobalMetadata(attr=attrs))
-        for i, (node_type, micros) in enumerate(durations, 1):
-            encodeMessage(handle, Node(id=i, name="n", type=node_type, duration_micros=micros))
-    return path
+    nodes = [node(i, kind, micros) for i, (kind, micros) in enumerate(durations, 1)]
+    return write_trace(path, nodes, None if captured else [])
 
 
 def gaps(tmp_path: Path, durations, captured: bool = True, disabled=frozenset()) -> set[tuple]:

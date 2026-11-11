@@ -4,8 +4,8 @@ from pathlib import Path
 
 import linter
 import rule_config
-from chakra.schema.protobuf.et_def_pb2 import AttributeProto, GlobalMetadata, Node
-from chakra.src.third_party.utils.protolib import encodeMessage
+from chakra.schema.protobuf.et_def_pb2 import AttributeProto, Node
+from families import write_trace
 
 Attr = AttributeProto
 META = {
@@ -29,12 +29,9 @@ def cpu_attrs() -> list[Attr]:
 
 def write(path: Path, meta: list[Attr], attrs: list[Attr], version: str = "0.0.4") -> Path:
     """Write a one-node trace with the given metadata and node attributes."""
-    with path.open("wb") as handle:
-        encodeMessage(handle, GlobalMetadata(version=version, attr=meta))
-        node = Node(id=1, name="aten::add", type=4, duration_micros=5)
-        node.attr.extend(attrs)
-        encodeMessage(handle, node)
-    return path
+    one = Node(id=1, name="aten::add", type=4, duration_micros=5)
+    one.attr.extend(attrs)
+    return write_trace(path, [one], meta, version)
 
 
 def rules(path: Path) -> list[str]:

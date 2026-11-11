@@ -71,9 +71,9 @@ def test_info_and_pass_hits_lower_no_consumer_level(tmp_path, monkeypatch, sever
     from dataclasses import replace
 
     import rule_family
-    from test_node_count import write_trace
+    from families import node, write_trace
 
-    path = write_trace(tmp_path / "t.et", 3)
+    path = write_trace(tmp_path / "t.et", [node(i) for i in (1, 2, 3)])
     assert linter.lint_trace(path).gaps  # the bare trace has gaps to ignore
     real = rule_family.RuleFamily.finish
     monkeypatch.setattr(

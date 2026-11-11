@@ -42,7 +42,7 @@ name = "empty-trace"
 description = "The trace holds a metadata header but no nodes. Consumers have nothing to replay, simulate or analyze."
 enabled = true
 severity = "fatal"
-message = "trace holds no nodes"
+message = "trace holds a metadata header node but no other nodes"
 consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "NOT SUITABLE" }
 
 [[rule]]
@@ -81,7 +81,7 @@ description = "The global metadata of a PyTorch-derived trace lacks the schema a
 enabled = true
 severity = "warning"
 message = "global metadata lacks {name} attribute"
-consumer_impact = { replay = "READY", simulator = "READY", analysis = "LIMITED" }
+consumer_impact = { replay = "REVIEW", simulator = "REVIEW", analysis = "REVIEW" }
 
 [[rule]]
 id = "MET003"
@@ -262,6 +262,15 @@ consumer_impact = { replay = "READY", simulator = "REVIEW", analysis = "NOT SUIT
 
 [[rule]]
 id = "COM001"
+name = "comm-no-device-data"
+description = "The trace holds host-side communication operators (record_param_comms) but no device-side communication node. The communications ran, but the Kineto device data for them is absent. The communication type, size and process group are therefore missing, so replay and simulation cannot model the communications, and analysis cannot attribute their execution time."
+enabled = true
+severity = "error"
+message = "{count} host-side communication operators, no device-side communication node"
+consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "LIMITED" }
+
+[[rule]]
+id = "COM002"
 name = "comm-missing-type"
 description = "A collective node lacks comm_type. Replay and simulation cannot tell which collective to run, such as all-reduce or all-gather."
 enabled = true
@@ -270,7 +279,7 @@ message = "missing comm_type attr"
 consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "REVIEW" }
 
 [[rule]]
-id = "COM002"
+id = "COM003"
 name = "comm-missing-size"
 description = "A collective, send or receive node lacks comm_size. Replay and simulation cannot size the transfer."
 enabled = true
@@ -279,49 +288,40 @@ message = "missing comm_size attr"
 consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "REVIEW" }
 
 [[rule]]
-id = "COM003"
+id = "COM004"
 name = "comm-missing-pg-name"
-description = "A collective node lacks pg_name. Replay and simulation cannot map the collective to its process group."
+description = "A collective node lacks the pg_name attribute so it is assumed that the all nodes participate using a single process group."
 enabled = true
-severity = "error"
+severity = "warning"
 message = "missing pg_name attr"
-consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "REVIEW" }
+consumer_impact = { replay = "REVIEW", simulator = "REVIEW", analysis = "REVIEW" }
 
 [[rule]]
-id = "COM004"
+id = "COM005"
 name = "comm-missing-src"
-description = "A send or receive node lacks comm_src. Replay and simulation cannot identify the sending peer. The mlc-chakra PyTorch converter does not write this attribute."
+description = "A send or receive node lacks comm_src. Replay and simulation cannot identify the sending peer."
 enabled = true
 severity = "error"
 message = "missing comm_src attr"
 consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "REVIEW" }
 
 [[rule]]
-id = "COM005"
+id = "COM006"
 name = "comm-missing-dst"
-description = "A send or receive node lacks comm_dst. Replay and simulation cannot identify the receiving peer. The mlc-chakra PyTorch converter does not write this attribute."
+description = "A send or receive node lacks comm_dst. Replay and simulation cannot identify the receiving peer."
 enabled = true
 severity = "error"
 message = "missing comm_dst attr"
 consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "REVIEW" }
 
 [[rule]]
-id = "COM006"
+id = "COM007"
 name = "comm-zero-size"
 description = "A communication node declares a comm_size of zero. Replay and simulation cannot model a transfer with no payload."
 enabled = true
 severity = "error"
 message = "zero comm_size"
 consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "REVIEW" }
-
-[[rule]]
-id = "COM007"
-name = "comm-default-stream"
-description = "Every collective that reports a stream uses default stream 0. Collectives normally run on a device stream, so the Kineto link may be incomplete."
-enabled = true
-severity = "warning"
-message = "all nodes on default stream {stream}"
-consumer_impact = { replay = "READY", simulator = "READY", analysis = "REVIEW" }
 
 # Operators
 

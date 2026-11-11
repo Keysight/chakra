@@ -6,19 +6,10 @@ import index_builder
 import linter
 import pytest
 import rule_family
-from chakra.schema.protobuf.et_def_pb2 import AttributeProto, GlobalMetadata, Node
-from chakra.src.third_party.utils.protolib import encodeMessage
+from chakra.schema.protobuf.et_def_pb2 import Node
 from dag_rules import DagRules
+from families import write_trace
 from index_builder import IndexBuilder
-
-
-def write(path: Path, nodes: list[Node]) -> Path:
-    """Write a trace holding the given nodes."""
-    with path.open("wb") as handle:
-        encodeMessage(handle, GlobalMetadata(attr=[AttributeProto(name="pid", uint64_val=1)]))
-        for node in nodes:
-            encodeMessage(handle, node)
-    return path
 
 
 def node(node_id: int, ctrl: tuple[int, ...] = (), data: tuple[int, ...] = ()) -> Node:
@@ -28,7 +19,7 @@ def node(node_id: int, ctrl: tuple[int, ...] = (), data: tuple[int, ...] = ()) -
 
 def dag(tmp_path: Path, nodes: list[Node]) -> dict[str, int | None]:
     """Return each reported DAG rule with its count."""
-    result = linter.scan_trace(write(tmp_path / "t.et", nodes))
+    result = linter.scan_trace(write_trace(tmp_path / "t.et", nodes))
     return {g.rule: g.message.total for g in result.gaps if g.rule.startswith("DAG")}
 
 
@@ -67,7 +58,7 @@ def test_count_blocked_ignores_self_and_missing_parents() -> None:
 
 
 def test_builder_feeds_each_node_once(tmp_path) -> None:
-    path = write(tmp_path / "t.et", [node(1), node(2, (2,)), node(3, (3, 3))])
+    path = write_trace(tmp_path / "t.et", [node(1), node(2, (2,)), node(3, (3, 3))])
     family = DagRules()
     IndexBuilder(path, families=[family]).build()
     assert (family.self_refs, family.dup_edges) == (2, 1)
@@ -100,7 +91,7 @@ def test_checks_follow_declaration_order() -> None:
 
 
 def test_disabled_rule_is_skipped(tmp_path) -> None:
-    path = write(tmp_path / "t.et", [node(1, (2,)), node(2, (1,)), node(3, (3,))])
+    path = write_trace(tmp_path / "t.et", [node(1, (2,)), node(2, (1,)), node(3, (3,))])
     for disabled, expected in ((set(), {"DAG003", "DAG005"}), ({"DAG005"}, {"DAG003"}), ({"DAG003"}, {"DAG005"})):
         family_ = DagRules(disabled)
         index = IndexBuilder(path, families=[family_]).build()
@@ -116,5 +107,5 @@ def test_scan_reads_the_file_once(tmp_path, monkeypatch) -> None:
     opened: list[str] = []
     real = index_builder.openFileRd
     monkeypatch.setattr(index_builder, "openFileRd", lambda p: opened.append(p) or real(p))
-    linter.scan_trace(write(tmp_path / "t.et", [node(1), node(2, (1,))]))
+    linter.scan_trace(write_trace(tmp_path / "t.et", [node(1), node(2, (1,))]))
     assert len(opened) == 1

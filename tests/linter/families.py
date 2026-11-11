@@ -1,9 +1,10 @@
-"""Helpers that feed in-memory nodes to rule families through the builder."""
+"""Helpers that build small generated traces and feed them to the linter."""
 
 from pathlib import Path
 
 from attribute_rules import AttributeRules
-from chakra.schema.protobuf.et_def_pb2 import COMP_NODE, AttributeProto, Node
+from chakra.schema.protobuf.et_def_pb2 import COMP_NODE, AttributeProto, GlobalMetadata, Node
+from chakra.src.third_party.utils.protolib import encodeMessage
 from index_builder import IndexBuilder, TraceIndex
 from rule_family import Hit, RuleFamily
 
@@ -33,3 +34,18 @@ def run(family: RuleFamily, nodes: list[Node], header: dict[str, object] | None 
     index = builder.index
     index.total = index.type_counts.total()
     return family.finish(index), index
+
+
+def write_trace(
+    path: Path,
+    nodes: list[Node],
+    meta: list[AttributeProto] | None = None,
+    version: str = "",
+) -> Path:
+    """Write a trace file; default metadata is a captured header (pid=1)."""
+    header = [AttributeProto(name="pid", uint64_val=1)] if meta is None else meta
+    with path.open("wb") as handle:
+        encodeMessage(handle, GlobalMetadata(version=version, attr=header))
+        for built in nodes:
+            encodeMessage(handle, built)
+    return path

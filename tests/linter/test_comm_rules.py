@@ -33,26 +33,20 @@ def spec(nodes: list[tuple[int, dict]]) -> dict[tuple[str, int], int]:  # noqa: 
     def count(rule: str, node_type: int) -> None:
         found[(rule, node_type)] = found.get((rule, node_type), 0) + 1
 
-    streamed = defaults = 0
     for node_type, attrs in nodes:
         coll = node_type == COMM_COLL_NODE
         if coll and "comm_type" not in attrs:
-            count("COM001", node_type)
-        if "comm_size" not in attrs:
             count("COM002", node_type)
-        if coll and "pg_name" not in attrs:
+        if "comm_size" not in attrs:
             count("COM003", node_type)
-        if not coll and "comm_src" not in attrs:
+        if coll and "pg_name" not in attrs:
             count("COM004", node_type)
-        if not coll and "comm_dst" not in attrs:
+        if not coll and "comm_src" not in attrs:
             count("COM005", node_type)
-        if attrs.get("comm_size") == 0:
+        if not coll and "comm_dst" not in attrs:
             count("COM006", node_type)
-        if coll and "stream" in attrs:
-            streamed += 1
-            defaults += attrs["stream"] == 0
-    if streamed and streamed == defaults:
-        found[("COM007", COMM_COLL_NODE)] = streamed
+        if attrs.get("comm_size") == 0:
+            count("COM007", node_type)
     return found
 
 
@@ -83,11 +77,21 @@ def test_other_node_types_are_ignored() -> None:
     assert hits_of([(COMP_NODE, {"stream": 0})]) == {}
 
 
-def test_collectives_all_on_default_stream_are_reported_once() -> None:
-    full = {"comm_type": 1, "pg_name": "g", "comm_size": 8}
-    same = [(COMM_COLL_NODE, {**full, "stream": 0})] * 3
-    assert hits_of(same) == {("COM007", COMM_COLL_NODE): 3}
-    assert hits_of([*same, (COMM_COLL_NODE, {**full, "stream": 4})]) == {}
+def test_host_operators_without_device_nodes_are_reported_once() -> None:
+    host = [node(i, COMP_NODE, name="record_param_comms") for i in (1, 2, 3)]
+    hits, _ = run(CommRules(), [*host, node(4, COMP_NODE, name="aten::add")])
+    assert [(h.rule, h.values["count"], h.ids) for h in hits] == [("COM001", 3, [1, 2, 3])]
+
+
+@pytest.mark.parametrize("device_type", TYPES)
+def test_any_device_communication_node_clears_the_finding(device_type) -> None:
+    built = [node(1, COMP_NODE, name="record_param_comms"), node(2, device_type)]
+    hits, _ = run(CommRules(), built)
+    assert "COM001" not in {h.rule for h in hits}
+
+
+def test_device_nodes_alone_do_not_trigger_the_finding() -> None:
+    assert "COM001" not in {h.rule for h in run(CommRules(), [node(1, COMM_COLL_NODE)])[0]}
 
 
 def test_hits_group_by_node_type_in_report_order() -> None:
@@ -100,11 +104,11 @@ def test_hits_group_by_node_type_in_report_order() -> None:
 def test_sample_ids_and_values() -> None:
     built = [node(i, COMM_COLL_NODE, pg_name="g", comm_size=8) for i in range(1, 6)]
     hits, _ = run(CommRules(), built)
-    hit = next(h for h in hits if h.rule == "COM001")
+    hit = next(h for h in hits if h.rule == "COM002")
     assert (hit.ids, hit.values) == ([1, 2, 5], {"count": 5})
 
 
-@pytest.mark.parametrize("off", ["COM001", "COM002", "COM003", "COM004", "COM005", "COM006", "COM007"])
+@pytest.mark.parametrize("off", ["COM002", "COM003", "COM004", "COM005", "COM006", "COM007", "COM001"])
 def test_disabled_rule_emits_nothing_and_changes_no_other(off) -> None:
     pool = [(t, v) for t in TYPES for v in variants(t)[::7]]
     for nodes in ([p] for p in pool):
