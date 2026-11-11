@@ -1,4 +1,8 @@
-"""Replay rules OPS001 to OPS006 and IO001 to IO003, fed by the single pass."""
+"""
+Replay rules fed by the single pass over a trace.
+
+Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
+"""
 
 import ast
 import fnmatch

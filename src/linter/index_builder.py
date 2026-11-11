@@ -1,4 +1,8 @@
-"""Single-pass trace ingestion that builds the dictionaries rules read."""
+"""
+Single-pass trace ingestion that builds the dictionaries rules read.
+
+Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
+"""
 
 import sys
 import time

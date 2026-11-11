@@ -1,4 +1,8 @@
-"""Base class and registry for rule families fed by one pass over a trace."""
+"""
+Base class and registry for rule families fed by one pass over a trace.
+
+Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
+"""
 
 import re
 from collections.abc import Callable, Iterable, Mapping

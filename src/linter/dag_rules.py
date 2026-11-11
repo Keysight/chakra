@@ -1,4 +1,8 @@
-"""Directed Acyclic Graph rules fed by the single pass over a trace."""
+"""
+Directed Acyclic Graph rules fed by the single pass over a trace.
+
+Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
+"""
 
 from collections.abc import Iterable, Mapping
 from itertools import chain

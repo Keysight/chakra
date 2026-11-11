@@ -1,4 +1,8 @@
-"""Rule configuration: rules.toml, its JSON schema and message templates."""
+"""
+Rule configuration: rules.toml, its JSON schema and message templates.
+
+Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
+"""
 
 import json
 import string

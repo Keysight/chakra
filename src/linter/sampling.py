@@ -1,4 +1,8 @@
-"""Sample-ID helpers shared by the linter and its rule families."""
+"""
+Sample-ID helpers shared by the linter and its rule families.
+
+Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
+"""
 
 from collections.abc import Iterable
 

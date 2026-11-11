@@ -1,4 +1,8 @@
-"""Rule message rendering: templates, placeholders and trace-wide values."""
+"""
+Rule message rendering: templates, placeholders and trace-wide values.
+
+Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
+"""
 
 from contextvars import ContextVar
 from functools import cache

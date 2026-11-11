@@ -1,4 +1,8 @@
-"""Communication rules COM001 to COM007, fed by the single pass over a trace."""
+"""
+Communication rules fed by the single pass over a trace.
+
+Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
+"""
 
 from collections import Counter
 from collections.abc import Iterable

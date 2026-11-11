@@ -1,4 +1,8 @@
-"""Attribute rules ATT001 to ATT005, fed by the single pass over a trace."""
+"""
+Attribute rules fed by the single pass over a trace.
+
+Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
+"""
 
 from collections import Counter
 from collections.abc import Iterable

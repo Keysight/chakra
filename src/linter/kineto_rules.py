@@ -1,4 +1,8 @@
-"""Kineto rules KIN001 to KIN006: evidence that device data was linked in."""
+"""
+Kineto rules fed by the single pass over a trace.
+
+Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
+"""
 
 from collections import Counter
 from collections.abc import Iterable

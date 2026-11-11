@@ -1,4 +1,8 @@
-"""Report renderers: markdown, HTML, stylish CLI, JSON and SARIF."""
+"""
+Report renderers: markdown, HTML, stylish CLI, JSON and SARIF.
+
+Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
+"""
 
 import html
 import json

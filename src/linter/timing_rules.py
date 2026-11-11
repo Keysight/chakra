@@ -1,4 +1,8 @@
-"""Timing rules TIM001 to TIM003, fed by the single pass over a trace."""
+"""
+Timing rules fed by the single pass over a trace.
+
+Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
+"""
 
 from collections import Counter
 from collections.abc import Iterable

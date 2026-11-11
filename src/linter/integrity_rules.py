@@ -1,4 +1,8 @@
-"""Integrity rules INT001 to INT004, judged on the index of one trace."""
+"""
+Integrity rules fed by the single pass over a trace.
+
+Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
+"""
 
 from collections.abc import Iterable
 

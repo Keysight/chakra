@@ -1,4 +1,8 @@
-"""Metadata rules MET001 to MET007, judged from the trace header."""
+"""
+Metadata rules fed by the single pass over a trace.
+
+Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
+"""
 
 try:
     from .index_builder import TraceIndex

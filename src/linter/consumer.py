@@ -1,4 +1,8 @@
-"""Grading of a trace per consumer; policy comes from `rules.toml`."""
+"""
+Grading of a trace per consumer; policy comes from `rules.toml`.
+
+Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
+"""
 
 from collections import Counter
 from dataclasses import dataclass, field
