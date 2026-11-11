@@ -174,15 +174,15 @@ def check_io(node: Node, op_schema: str) -> str:
     """Return the I/O rule a CPU operator breaks, or an empty string."""
     inputs, outputs = io_values(node.inputs), io_values(node.outputs)
     if inputs is None or outputs is None:
-        return "IO001"
+        return "OPS007"
     if not op_schema:
         return ""  # OPS001 covers the node
     expected = schema_arity(op_schema)
     if not (inputs or outputs):
         # An operator without arguments may record no I/O
-        return "" if expected == 0 else "IO003"
+        return "" if expected == 0 else "OPS009"
     if expected is not None and expected != len(inputs):
-        return "IO002"
+        return "OPS008"
     return ""
 
 
@@ -331,20 +331,20 @@ class ReplayRules(RuleFamily):
         values = {"count": self.io_hits[rule_id], "total": self.replayable}
         return [Hit(rule_id, self.io_ids.get(rule_id, []), values, COMP_NODE)]
 
-    @rule("IO001")
+    @rule("OPS007")
     def malformed_io(self, index: TraceIndex) -> list[Hit]:
         """Report I/O fields that do not parse or disagree in length."""
-        return self.io_hit("IO001")
+        return self.io_hit("OPS007")
 
-    @rule("IO002")
+    @rule("OPS008")
     def arity_mismatch(self, index: TraceIndex) -> list[Hit]:
         """Report recorded inputs that do not fit the op_schema."""
-        return self.io_hit("IO002")
+        return self.io_hit("OPS008")
 
-    @rule("IO003")
+    @rule("OPS009")
     def missing_io(self, index: TraceIndex) -> list[Hit]:
         """Report operators that need arguments but recorded none."""
-        return self.io_hit("IO003")
+        return self.io_hit("OPS009")
 
     @rule(OPS004)
     def idle_compute(self, index: TraceIndex) -> list[Hit]:

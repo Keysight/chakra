@@ -1,11 +1,19 @@
-"""MetadataRules judges the header: version is required, the rest warn."""
+"""MetadataRules judges readability, node types, and the header."""
 
 from itertools import product
 
+from chakra.schema.protobuf.et_def_pb2 import NodeType
 from families import node, run
+from index_builder import IndexBuilder
 from metadata_rules import MetadataRules
 
 TIMES = (None, 5, 10, "late")  # start_ts or finish_ts: absent, early, late, text
+# The header tests leave out the integrity rules MET009 to MET012
+INTEGRITY = frozenset({"MET009", "MET010", "MET011", "MET012"})
+# The integrity tests leave out the header rules MET001 to MET008
+HEADER = frozenset(f"MET00{n}" for n in range(1, 9))
+KNOWN = sorted(NodeType.DESCRIPTOR.values_by_number)[:3]
+UNKNOWN = (97, 98)
 ATTR_RULES = MetadataRules.METADATA_ATTRS
 ALL_RULES = {"MET001", "MET002", "MET003", "MET004", "MET007"}  # inverted header
 
@@ -27,7 +35,7 @@ def header(version: bool, present: tuple[bool, ...], start, finish) -> dict[str,
 def hits_of(head: dict[str, object], pytorch: bool) -> dict[str, dict]:
     """Run the family on a trace with or without PyTorch-only attributes."""
     nodes = [node(1, rf_id=1)] if pytorch else [node(1)]
-    hits, _ = run(MetadataRules(), nodes, head)
+    hits, _ = run(MetadataRules(INTEGRITY), nodes, head)
     return {h.rule: h.values for h in hits}
 
 
@@ -62,3 +70,42 @@ def test_unsupported_schema_is_reported_on_pytorch_traces_only() -> None:
         assert "MET008" not in hits_of({**bad, "schema": schema}, pytorch=True)
     assert hits_of(bad, pytorch=True)["MET008"] == {"value": "9.9.9-chakra.0.0.4"}
     assert "MET008" not in hits_of(bad, pytorch=False)
+
+
+# --- Integrity rules MET009 to MET012 ---
+
+
+def test_every_mix_of_known_and_unknown_types_matches_the_spec() -> None:
+    for types in product((*KNOWN, *UNKNOWN), repeat=3):
+        hits, _ = run(MetadataRules(HEADER), [node(i, t) for i, t in enumerate(types, 1)])
+        got = {h.values["type"]: (h.values["count"], h.ids) for h in hits if h.rule == "MET011"}
+        # MET011: each type the schema does not define, with its node count
+        want = {t: (types.count(t), [i for i, x in enumerate(types, 1) if x == t]) for t in set(types) if t in UNKNOWN}
+        assert got == want, types
+
+
+def test_unknown_type_sample_ids_keep_first_two_then_latest() -> None:
+    hits, _ = run(MetadataRules(HEADER), [node(i, 97) for i in range(1, 7)])
+    assert hits[0].ids == [1, 2, 6]
+
+
+def test_disabled_integrity_rule_emits_nothing() -> None:
+    hits, _ = run(MetadataRules(HEADER | {"MET011"}), [node(1, 97)])
+    assert [h.rule for h in hits] == ["MET012"]
+
+
+def test_empty_trace_reports_met010() -> None:
+    hits, _ = run(MetadataRules(HEADER), [])
+    assert [(h.rule, h.values) for h in hits] == [("MET010", {"count": 0})]
+
+
+def test_nonempty_trace_reports_its_count_not_met010() -> None:
+    hits, _ = run(MetadataRules(HEADER), [node(1)])
+    assert [(h.rule, h.values) for h in hits] == [("MET012", {"count": 1})]
+
+
+def test_unreadable_file_reports_met009_not_met010(tmp_path) -> None:
+    index = IndexBuilder(tmp_path / "missing.et", families=[MetadataRules(HEADER)]).build()
+    hits = MetadataRules(HEADER).finish(index)
+    assert [h.rule for h in hits] == ["MET009"]
+    assert isinstance(hits[0].values["error"], Exception)

@@ -17,10 +17,10 @@ def gap(rule: str) -> consumer.Gap:
 def test_every_family_gap_rule_is_a_gap_in_the_toml() -> None:
     import rule_family
 
-    notes = {"OPS002", "INT004"}  # notes, not gaps
+    notes = {"OPS002", "MET012"}  # notes, not gaps
     needed = {rule for family in rule_family.FAMILIES for rule in family.checks} - notes
     # Fatal findings stop the scan before grading
-    needed -= {"INT001", "INT002"}
+    needed -= {"MET009", "MET010"}
     rules = rule_config.shipped_rules()
     assert {r for r in needed if rules[r].is_gap()} == needed
 

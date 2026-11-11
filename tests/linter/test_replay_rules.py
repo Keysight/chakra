@@ -14,9 +14,9 @@ TWO_IO = {"values": "[1, 2]", "shapes": "[[1], [1]]", "types": "['T', 'T']"}
 # kind: (is_cpu_op, op_schema, name, duration, inputs, rule the I/O breaks)
 KINDS = {
     "cpu_ok": (True, SCHEMA, "ok", 5, OK_IO, ""),
-    "cpu_bad_io": (True, SCHEMA, "bad", 5, {"values": "x[", "shapes": "", "types": ""}, "IO001"),
-    "cpu_arity": (True, SCHEMA, "arity", 5, TWO_IO, "IO002"),
-    "cpu_no_io": (True, SCHEMA, "noio", 5, None, "IO003"),
+    "cpu_bad_io": (True, SCHEMA, "bad", 5, {"values": "x[", "shapes": "", "types": ""}, "OPS007"),
+    "cpu_arity": (True, SCHEMA, "arity", 5, TWO_IO, "OPS008"),
+    "cpu_no_io": (True, SCHEMA, "noio", 5, None, "OPS009"),
     "cpu_no_args": (True, "aten::x() -> Tensor", "noargs", 5, None, ""),
     "cpu_bare": (True, "", "bare", 5, None, ""),
     "cpu_exempt": (True, "", "nccl:x", 5, None, ""),
@@ -85,7 +85,7 @@ def spec(kinds: tuple, parented: tuple, captured: bool) -> dict:  # noqa: C901
         comp = [i for i in ids if KINDS[kind[i]] is not None]
         # OPS006 takes the place of OPS003 in a synthetic trace
         found["OPS003" if captured else "OPS006"] = (len(comp), len([i for i in comp if KINDS[kind[i]][1]]))
-    for rule in ("IO001", "IO002", "IO003"):
+    for rule in ("OPS007", "OPS008", "OPS009"):
         count = sum(1 for i in units if i in schema and KINDS[kind[i]][5] == rule)
         if count:
             found[rule] = (count, len(units))
@@ -107,7 +107,7 @@ def hits_of(kinds: tuple, parented: tuple, captured: bool = True) -> dict:
             out[h.rule] = (v["count"], v["total"])
         elif h.rule in ("OPS003", "OPS006"):
             out[h.rule] = (v["total"], v["schema"])
-        elif h.rule == "OPS002" or h.rule.startswith("IO"):
+        elif h.rule == "OPS002" or h.rule in {"OPS007", "OPS008", "OPS009"}:
             out[h.rule] = (v["count"], v["total"])
         else:
             out[h.rule] = (v["count"],)
@@ -128,8 +128,8 @@ def test_synthetic_traces_never_report_idle_compute() -> None:
 
 def test_io_checks_cover_only_the_outermost_schema_node() -> None:
     # The inner node has bad I/O but its parent already replays the subtree
-    assert "IO001" not in hits_of(("cpu_ok", "cpu_bad_io"), (False, True))
-    assert "IO001" in hits_of(("cpu_ok", "cpu_bad_io"), (False, False))
+    assert "OPS007" not in hits_of(("cpu_ok", "cpu_bad_io"), (False, True))
+    assert "OPS007" in hits_of(("cpu_ok", "cpu_bad_io"), (False, False))
 
 
 def test_ops001_reports_one_hit_per_operator_family_with_first_node() -> None:
@@ -153,7 +153,9 @@ def test_ops003_samples_compute_nodes_else_the_first_type() -> None:
     assert [(h.rule, h.ids) for h in hits if h.rule == "OPS003"] == [("OPS003", [2])]
 
 
-@pytest.mark.parametrize("off", ["OPS001", "OPS002", "OPS003", "OPS004", "OPS005", "OPS006", "IO001", "IO002", "IO003"])
+@pytest.mark.parametrize(
+    "off", ["OPS001", "OPS002", "OPS003", "OPS004", "OPS005", "OPS006", "OPS007", "OPS008", "OPS009"]
+)
 def test_disabled_rule_emits_nothing(off) -> None:
     kinds = ("cpu_bad_io", "cpu_arity", "cpu_no_io", "cpu_bare", "gpu_idle")
     hits, _ = run(ReplayRules({off}, skip), build(kinds, (False,) * 5))

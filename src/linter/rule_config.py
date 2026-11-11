@@ -18,7 +18,7 @@ DEFAULT_RULES = Path(__file__).with_name("rules.toml")
 RULES_SCHEMA = Path(__file__).with_name("rules.schema.json")
 
 # Unreadable or empty traces cannot be graded, so these rules stay on
-FATAL_RULES = ("INT001", "INT002")
+FATAL_RULES = ("MET009", "MET010")
 
 
 class RuleConfigError(Exception):

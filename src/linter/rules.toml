@@ -25,45 +25,7 @@ id = "SUI003"
 name = "analysis"
 description = "Suitability (analysis) for Analysis: studying the timing and structure of a captured run. The verdict is the worst analysis value in the consumer_impact line of the rules that fired; the report lists which rules caused it."
 
-# Integrity
-
-[[rule]]
-id = "INT001"
-name = "decode-failure"
-description = "The Chakra protobuf decoder cannot read the file. Causes include a corrupt, truncated or non-Chakra file. Every use is unsuitable because no node can be read."
-enabled = true
-severity = "fatal"
-message = "decode failure: {error}"
-consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "NOT SUITABLE" }
-
-[[rule]]
-id = "INT002"
-name = "empty-trace"
-description = "The trace holds a metadata header but no nodes. Consumers have nothing to replay, simulate or analyze."
-enabled = true
-severity = "fatal"
-message = "trace holds a metadata header node but no other nodes"
-consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "NOT SUITABLE" }
-
-[[rule]]
-id = "INT003"
-name = "schema-unknown-type"
-description = "A node carries a type that the installed mlc-chakra schema does not define. The trace likely comes from a newer or foreign schema. Consumers may misread the node, so no consumer is suitable."
-enabled = true
-severity = "error"
-message = "node type {type} not in Chakra schema version {version}"
-consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "NOT SUITABLE" }
-
-[[rule]]
-id = "INT004"
-name = "node-count"
-description = "The trace decoded and holds nodes. The row reports the node total and the installed schema version. It informs only and lowers no consumer."
-enabled = true
-severity = "info"
-message = "read and decoded {count} nodes using schema version {version}"
-consumer_impact = { replay = "READY", simulator = "READY", analysis = "READY" }
-
-# Metadata
+# Metadata and integrity
 
 [[rule]]
 id = "MET001"
@@ -138,6 +100,44 @@ message = "global metadata schema {value} is not supported by the converter"
 consumer_impact = { replay = "REVIEW", simulator = "REVIEW", analysis = "REVIEW" }
 
 [[rule]]
+id = "MET009"
+name = "decode-failure"
+description = "The Chakra protobuf decoder cannot read the file. Causes include a corrupt, truncated or non-Chakra file. Every use is unsuitable because no node can be read."
+enabled = true
+severity = "fatal"
+message = "decode failure: {error}"
+consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "NOT SUITABLE" }
+
+[[rule]]
+id = "MET010"
+name = "empty-trace"
+description = "The trace holds a metadata header but no nodes. Consumers have nothing to replay, simulate or analyze."
+enabled = true
+severity = "fatal"
+message = "trace holds a metadata header node but no other nodes"
+consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "NOT SUITABLE" }
+
+[[rule]]
+id = "MET011"
+name = "schema-unknown-type"
+description = "A node carries a type that the installed mlc-chakra schema does not define. The trace likely comes from a newer or foreign schema. Consumers may misread the node, so no consumer is suitable."
+enabled = true
+severity = "error"
+message = "node type {type} not in Chakra schema version {version}"
+consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "NOT SUITABLE" }
+
+[[rule]]
+id = "MET012"
+name = "node-count"
+description = "The trace decoded and holds nodes. The row reports the node total and the installed schema version. It informs only and lowers no consumer."
+enabled = true
+severity = "info"
+message = "read and decoded {count} nodes using schema version {version}"
+consumer_impact = { replay = "READY", simulator = "READY", analysis = "READY" }
+
+# DAG
+
+[[rule]]
 id = "DAG001"
 name = "dag-duplicate-node"
 description = "Two or more nodes share one ID. Dependencies become ambiguous, so the graph cannot be trusted."
@@ -182,36 +182,7 @@ severity = "error"
 message = "in or blocked by a {field} cycle"
 consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "NOT SUITABLE" }
 
-# Timing
-
-[[rule]]
-id = "TIM001"
-name = "timing-absent"
-description = "Timing is absent. More than 50% of all nodes have zero duration, or every node of one checked type does (compute, collective, send or receive). The merge of host and device data likely did not complete. Analysis cannot use the trace, and the simulator needs review."
-enabled = true
-severity = "warning"
-message = "zero duration; timing absent"
-consumer_impact = { replay = "READY", simulator = "REVIEW", analysis = "NOT SUITABLE" }
-
-[[rule]]
-id = "TIM002"
-name = "timing-partial"
-description = "Timing is partial. Between 5% and 50% of all nodes have zero duration; healthy traces stay at or below 5%. Analysis fidelity drops, while replay and simulation still work."
-enabled = true
-severity = "warning"
-message = "zero duration; timing partial"
-consumer_impact = { replay = "READY", simulator = "READY", analysis = "LIMITED" }
-
-[[rule]]
-id = "TIM003"
-name = "synthetic-timing-unknown"
-description = "A synthetic (generated) trace has zero duration on every node. The linter cannot tell whether the generator models durations, so a reviewer decides whether analysis applies."
-enabled = true
-severity = "warning"
-message = "zero duration on all nodes; modeled values unknown"
-consumer_impact = { replay = "READY", simulator = "READY", analysis = "REVIEW" }
-
-# Kineto link
+# Kineto link and timing
 
 [[rule]]
 id = "KIN001"
@@ -266,6 +237,33 @@ enabled = true
 severity = "error"
 message = "device node has multiple host parents and no node has a duration"
 consumer_impact = { replay = "READY", simulator = "REVIEW", analysis = "NOT SUITABLE" }
+
+[[rule]]
+id = "KIN007"
+name = "timing-absent"
+description = "Timing is absent. More than 50% of all nodes have zero duration, or every node of one checked type does (compute, collective, send or receive). The merge of host and device data likely did not complete. Analysis cannot use the trace, and the simulator needs review."
+enabled = true
+severity = "warning"
+message = "zero duration; timing absent"
+consumer_impact = { replay = "READY", simulator = "REVIEW", analysis = "NOT SUITABLE" }
+
+[[rule]]
+id = "KIN008"
+name = "timing-partial"
+description = "Timing is partial. Between 5% and 50% of all nodes have zero duration; healthy traces stay at or below 5%. Analysis fidelity drops, while replay and simulation still work."
+enabled = true
+severity = "warning"
+message = "zero duration; timing partial"
+consumer_impact = { replay = "READY", simulator = "READY", analysis = "LIMITED" }
+
+[[rule]]
+id = "KIN009"
+name = "synthetic-timing-unknown"
+description = "A synthetic (generated) trace has zero duration on every node. The linter cannot tell whether the generator models durations, so a reviewer decides whether analysis applies."
+enabled = true
+severity = "warning"
+message = "zero duration on all nodes; modeled values unknown"
+consumer_impact = { replay = "READY", simulator = "READY", analysis = "REVIEW" }
 
 # Communication
 
@@ -451,7 +449,7 @@ severity = "error"
 message = "data operation node without a defined data_op"
 consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "REVIEW" }
 
-# Operators
+# Operators and operator I/O
 
 [[rule]]
 id = "OPS001"
@@ -537,10 +535,8 @@ severity = "warning"
 message = "no replayable CPU operators in a synthetic trace: {total} compute nodes, {schema} have op_schema"
 consumer_impact = { replay = "REVIEW", simulator = "READY", analysis = "READY" }
 
-# Operator I/O
-
 [[rule]]
-id = "IO001"
+id = "OPS007"
 name = "io-malformed"
 description = "A replay unit carries input or output fields that do not parse, or whose values, shapes and types lists differ in length. Replay cannot build the operator arguments."
 enabled = true
@@ -549,7 +545,7 @@ message = "CPU operators with malformed I/O fields"
 consumer_impact = { replay = "NOT SUITABLE", simulator = "READY", analysis = "READY" }
 
 [[rule]]
-id = "IO002"
+id = "OPS008"
 name = "io-schema-arity"
 description = "A replay unit (a CPU node that replay calls) records a number of inputs that differs from the argument count of its op_schema. Replay may pass the wrong arguments, so a reviewer compares the recorded inputs with the schema."
 enabled = true
@@ -558,7 +554,7 @@ message = "CPU operators with input count differing from op_schema"
 consumer_impact = { replay = "REVIEW", simulator = "READY", analysis = "READY" }
 
 [[rule]]
-id = "IO003"
+id = "OPS009"
 name = "io-cpu-missing"
 description = "A replay unit has an op_schema that expects arguments, but records no inputs and no outputs. Replay has no tensors to pass, so a reviewer confirms whether the operator needs tensors."
 enabled = true

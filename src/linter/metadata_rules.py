@@ -4,19 +4,26 @@ Metadata rules fed by the single pass over a trace.
 Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
 """
 
+from collections.abc import Iterable
+
+from chakra.schema.protobuf.et_def_pb2 import Node, NodeType
+
 try:
     from .index_builder import TraceIndex
     from .rule_family import Hit, RuleFamily, register, rule
+    from .sampling import add_sample
 except ImportError:  # run as a top-level module, not a package
     from index_builder import TraceIndex  # type: ignore[no-redef]
     from rule_family import Hit, RuleFamily, register, rule  # type: ignore[no-redef]
+    from sampling import add_sample  # type: ignore[no-redef]
 
 
 @register
 class MetadataRules(RuleFamily):
-    """Missing and inconsistent capture metadata."""
+    """Unreadable files, empty traces, unknown node types, and capture metadata."""
 
-    order = 60
+    # Leads the report: the fatal rules MET009 and MET010 run before the others
+    order = 10
 
     # Rule IDs; each must match an entry in rules.toml
     MET001 = "MET001"  # version: required, every trace
@@ -27,6 +34,20 @@ class MetadataRules(RuleFamily):
     MET006 = "MET006"  # finish_ts
     MET007 = "MET007"  # finish_ts before start_ts
     MET008 = "MET008"  # schema the converter does not support
+    MET009 = "MET009"  # file cannot be decoded
+    MET010 = "MET010"  # trace holds no nodes
+    MET011 = "MET011"  # node type unknown to the schema
+    MET012 = "MET012"  # node count of a readable trace
+
+    def __init__(self, disabled: Iterable[str] = ()) -> None:
+        """Start with no unknown types."""
+        super().__init__(disabled)
+        self.type_ids: dict[int, list[int]] = {}  # sample node IDs per unknown type
+
+    def add(self, node: Node) -> None:
+        """Sample the nodes of a type that the schema does not define."""
+        if node.type not in NodeType.DESCRIPTOR.values_by_number:
+            add_sample(self.type_ids, node.type, node.id)  # type: ignore[arg-type]
 
     # Schema values the converter accepts; a test pins them to PyTorchNode
     SUPPORTED_SCHEMAS = (
@@ -100,3 +121,27 @@ class MetadataRules(RuleFamily):
         if index.pytorch_nodes and isinstance(value, str) and value not in self.SUPPORTED_SCHEMAS:
             return [Hit(self.MET008, [], {"value": value})]
         return []
+
+    @rule(MET009)
+    def decode_failure(self, index: TraceIndex) -> list[Hit]:
+        """Report a file that the decoder could not read."""
+        return [Hit(self.MET009, [], {"error": index.error})] if index.error else []
+
+    @rule(MET010)
+    def empty_trace(self, index: TraceIndex) -> list[Hit]:
+        """Report a readable trace that holds no nodes."""
+        return [Hit(self.MET010, [], {"count": 0})] if not index.error and not index.total else []
+
+    @rule(MET011)
+    def unknown_types(self, index: TraceIndex) -> list[Hit]:
+        """Report each unknown node type with its node count."""
+        return [
+            Hit(self.MET011, self.type_ids.get(t, []), {"type": t, "count": count})
+            for t, count in index.type_counts.items()
+            if t not in NodeType.DESCRIPTOR.values_by_number
+        ]
+
+    @rule(MET012)
+    def node_count(self, index: TraceIndex) -> list[Hit]:
+        """Report the node total of a trace that holds nodes."""
+        return [Hit(self.MET012, [], {"count": index.total})] if not index.error and index.total else []

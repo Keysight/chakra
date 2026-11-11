@@ -17,7 +17,6 @@ try:
         kineto_rules,  # noqa: F401  (registers its family)
         metadata_rules,  # noqa: F401  (registers its family)
         storage_rules,  # noqa: F401  (registers its family)
-        timing_rules,  # noqa: F401  (registers its family)
     )
     from .attribute_rules import AttributeRules
     from .consumer import (
@@ -27,8 +26,8 @@ try:
         TraceResult,
     )
     from .index_builder import IndexBuilder
-    from .integrity_rules import IntegrityRules
     from .messages import TRACE_VALUES, Message, Messages, default_messages, remember, render, rule_messages
+    from .metadata_rules import MetadataRules
     from .replay_rules import ReplayRules, exempt_matcher
     from .reports import CLI_FORMATS, REPORT_FORMATS, rule_inventory, stylish_block, stylish_summary, trace_findings
     from .rule_config import DEFAULT_RULES, FATAL_RULES, Rule, RuleConfigError, load_rules, shipped_rules
@@ -39,7 +38,6 @@ except ImportError:  # run as a top-level module, not a package
     import kineto_rules  # noqa: F401  (registers its family)
     import metadata_rules  # noqa: F401  (registers its family)
     import storage_rules  # noqa: F401  (registers its family)
-    import timing_rules  # noqa: F401  (registers its family)
     from attribute_rules import AttributeRules  # type: ignore[no-redef]
     from consumer import (  # type: ignore[no-redef]
         Finding,
@@ -48,7 +46,6 @@ except ImportError:  # run as a top-level module, not a package
         TraceResult,
     )
     from index_builder import IndexBuilder  # type: ignore[no-redef]
-    from integrity_rules import IntegrityRules  # type: ignore[no-redef]
     from messages import (  # type: ignore[no-redef]
         TRACE_VALUES,
         Message,
@@ -58,6 +55,7 @@ except ImportError:  # run as a top-level module, not a package
         render,
         rule_messages,
     )
+    from metadata_rules import MetadataRules  # type: ignore[no-redef]
     from replay_rules import ReplayRules, exempt_matcher  # type: ignore[no-redef]
     from reports import (  # type: ignore[no-redef]
         CLI_FORMATS,
@@ -124,7 +122,7 @@ def scan_trace(
     skip = exempt_matcher(default_exempt() if exempt is None else exempt)
     # Registered families in report order: findings list in this order
     families = build_families(disabled, skip)
-    integrity = next(f for f in families if isinstance(f, IntegrityRules))
+    integrity = next(f for f in families if isinstance(f, MetadataRules))
     replay = next(f for f in families if isinstance(f, ReplayRules))
     result = TraceResult()
     index = IndexBuilder(path, on_progress, AttributeRules.ATTR_KINDS, families).build()
@@ -137,14 +135,14 @@ def scan_trace(
     remember(total=result.total, schema=replay.comp_schema)
     # No capture markers and no device data: generated, so no merge applies
     result.synthetic = index.synthetic
-    # A fatal hit (unreadable or empty trace) stops the scan before grading
+    # A fatal hit (MET009, MET010) stops the scan before grading
     hits = integrity.finish(index)
     fatal = [h for h in hits if h.severity == FATAL]
     if fatal:
         result.problems += [render(messages, h.rule, **h.values) for h in fatal]
         result.fatal_rule = fatal[0].rule
         return result
-    # Integrity ran first; the rest follow in report order
+    # Metadata and integrity ran first; the rest follow in report order
     hits += [hit for family in families if family is not integrity for hit in family.finish(index)]
     shipped = shipped_rules()
     for hit in hits:

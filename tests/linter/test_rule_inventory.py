@@ -49,7 +49,7 @@ def test_list_rules_shows_state(shipped_rules, capsys) -> None:
     assert len(lines) == len(shipped_rules) + 1
     states = {ln.split()[0]: ln.split()[-1] for ln in lines[:-1]}
     assert states["DAG005"] == "disabled"
-    assert states["INT001"] == "enabled"
+    assert states["MET009"] == "enabled"
     assert lines[-1] == f"{len(shipped_rules)} rules, 1 disabled"
 
 
@@ -64,12 +64,12 @@ def test_report_links_every_rule_to_a_description(shipped_rules) -> None:
     trace = ROOT / "missing.et"
     result = linter.TraceResult()
     result.problems = ["cannot decode"]
-    result.fatal_rule = "INT001"
+    result.fatal_rule = "MET009"
     for as_html in (False, True):
         text = reports.render_report([(trace, result)], shipped_rules, as_html=as_html)
-        assert "#### INT001" in text
+        assert "#### MET009" in text
         assert "#### SUI001" in text
-        assert "(#INT001)" in text or 'href="#INT001"' in text
+        assert "(#MET009)" in text or 'href="#MET009"' in text
 
 
 def test_selectors_accept_name_and_prefix(shipped_rules) -> None:
@@ -114,9 +114,9 @@ def test_every_rules_module_registers_a_family() -> None:
 
 
 def test_family_orders_are_unique_and_integrity_leads() -> None:
-    """Report order is explicit: no ties, integrity first."""
+    """Report order is explicit: no ties, metadata and integrity first."""
     import rule_family
 
     orders = [f.order for f in rule_family.FAMILIES]
     assert len(orders) == len(set(orders))
-    assert min(rule_family.FAMILIES, key=lambda f: f.order).__name__ == "IntegrityRules"
+    assert min(rule_family.FAMILIES, key=lambda f: f.order).__name__ == "MetadataRules"

@@ -221,7 +221,7 @@ severity = "error"
 message = "self-dependency"
 ```
 
-- The ID prefix groups rules by area: `INT`, `DAG`, `TIM`, `KIN`, `COM`, `STO`, `OPS`, `IO`, `MET`, `ATT`.
+- The ID prefix groups rules by area: `MET` (metadata and integrity), `DAG`, `KIN` (device link and timing), `COM`, `STO`, `OPS` (operators and operator I/O), `ATT`.
 - IDs stay stable and are never reused for a different rule.
 - Placeholders are limited per rule. The loader rejects a message that names a value its check does not supply.
 
@@ -258,7 +258,7 @@ One rule ID links a Hit to its outputs.
 - `TraceResult.status` takes the worst value per consumer across all findings.
 - The CLI and the report show the same rows: findings, then one suitability row per consumer.
 
-#### Worked Example: `TIM001`
+#### Worked Example: `KIN007`
 
 - **Hit**: `timing-absent` returns severity `warning`.
 - **Verdict**: replay `READY`, simulator `REVIEW`, analysis `NOT SUITABLE`.
@@ -271,7 +271,7 @@ One rule ID links a Hit to its outputs.
   - Conformance to `rules.schema.json`.
   - Unique rule IDs and names.
   - Valid message placeholders.
-  - `INT001` and `INT002` stay enabled, because an unreadable or empty trace cannot be graded.
+  - `MET009` and `MET010` stay enabled, because an unreadable or empty trace cannot be graded.
 - `tests/linter/test_rules_toml.py` enforces the criteria that the schema cannot express:
   - IDs and names are unique.
   - Prefix groups are contiguous and numbered from 001.

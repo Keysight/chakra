@@ -223,7 +223,7 @@ class IndexBuilder:
         index.type_counts[node.type] += 1
         if not (node.inputs.values or node.outputs.values):
             index.no_tensor_io.add(node_id)
-        # A repeated ID overwrites the earlier node; record it for INT rules
+        # A repeated ID overwrites the earlier node; record it for DAG rules
         if node_id in index.node_type:
             index.duplicate_ids.append(node_id)
         index.node_type[node_id] = node.type

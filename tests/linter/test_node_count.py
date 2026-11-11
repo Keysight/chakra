@@ -52,17 +52,17 @@ def test_block_lists_path_then_count_then_rules(tmp_path) -> None:
     path = trace(tmp_path / "t.et", 3)
     rows = linter.stylish_block(path, linter.lint_trace(path), color=False)
     assert rows[0] == str(path)
-    assert any("INT004  info" in r and "read and decoded 3 nodes" in r for r in rows)
+    assert any("MET012  info" in r and "read and decoded 3 nodes" in r for r in rows)
 
 
 def test_count_and_empty_trace_are_separate_rules(tmp_path) -> None:
     messages = default_messages()
-    assert messages["INT004"] == "read and decoded {count} nodes using schema version {version}"
-    text = render(messages, "INT004", count=1234)
+    assert messages["MET012"] == "read and decoded {count} nodes using schema version {version}"
+    text = render(messages, "MET012", count=1234)
     assert text == f"read and decoded 1,234 nodes using schema version {chakra_version()}"
     empty = trace(tmp_path / "e.et", 0)
     rows = linter.stylish_block(empty, linter.lint_trace(empty), color=False)
-    assert any("INT002  error    trace holds a metadata header node but no other nodes" in r for r in rows)
+    assert any("MET010  error    trace holds a metadata header node but no other nodes" in r for r in rows)
 
 
 def test_count_wording_comes_from_the_rules_file(tmp_path) -> None:
@@ -71,4 +71,4 @@ def test_count_wording_comes_from_the_rules_file(tmp_path) -> None:
     path = tmp_path / "rules.toml"
     path.write_text(custom)
     messages = rule_messages(linter.load_rules(path))
-    assert render(messages, "INT004", count=1234) == "1,234 read"
+    assert render(messages, "MET012", count=1234) == "1,234 read"
