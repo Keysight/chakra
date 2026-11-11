@@ -58,6 +58,29 @@ chakra_linter traces/ --report-output report.md
 - Use the report as a gate before replay, simulation, or analysis starts.
 - Share the report with the trace so consumers see the supported uses.
 
+## Coverage of Upstream Checks
+
+- `rules.toml` is the source of truth. Consumers need not run the link or convert stage to learn what a trace lacks.
+- Every upstream check that leaves evidence in a finished `.et` file has a rule.
+- A check that aborts the tool leaves no `.et` file, so no rule applies.
+
+| Upstream check | Stage | Linter rule |
+|----------------|-------|-------------|
+| Duplicate node ID | Convert (`pytorch_converter.py`) | `DAG001` |
+| Dependency cycle | Convert (`pytorch_converter.py`) | `DAG005` |
+| Unsupported schema version | Convert (`pytorch_node.py`) | `MET008` |
+| Unrecognized collective type | Convert (`pytorch_converter.py`) | `COM002`, `COM008` |
+| GPU operator without host parent (no runtime operator, no parent, no `external_id`) | Link (`trace_linker.py`) | `KIN003`, `KIN005` |
+| Duplicate Kineto correlation ID | Link (`chakra_device_trace_loader.py`) | None: the tool aborts |
+| Kineto arrow event without `id` | Link (`chakra_device_trace_loader.py`) | None: the tool aborts |
+| Negative exclusive duration | Link (`chakra_device_trace_loader.py`) | None: the tool aborts |
+| Unsupported tensor data type | Convert (`pytorch_node.py`) | None: the tool aborts |
+| Host operator without Kineto match | Link (`trace_linker.py`) | None: no trace evidence |
+| Synchronization dependency without external IDs | Link (`trace_linker.py`) | None: no trace evidence |
+| Missing `et_replay` package | Link (`trace_link.py`) | None: environment check |
+
+- Add a row when a stage gains a check. Add a rule when the check leaves evidence in the `.et` file.
+
 ## Methodology
 
 - Usability is a degree, not a yes or no answer. Every trace receives one usability value per consumer.

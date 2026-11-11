@@ -20,7 +20,8 @@
     "schema": "Number of compute nodes that carry an op_schema.",
     "name": "Name of the node or metadata attribute that is absent.",
     "start": "Value of the start_ts metadata attribute.",
-    "finish": "Value of the finish_ts metadata attribute."
+    "finish": "Value of the finish_ts metadata attribute.",
+    "value": "Value of the metadata attribute that the converter does not support."
   },
   "properties": {
     "rule": {

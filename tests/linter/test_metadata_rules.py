@@ -47,3 +47,18 @@ def test_every_header_matches_the_spec() -> None:
             if pytorch and isinstance(start_ts, int) and isinstance(finish_ts, int) and finish_ts < start_ts:
                 want["MET007"] = {"start": start_ts, "finish": finish_ts}
             assert hits_of(head, pytorch) == want, head
+
+
+def test_schema_list_matches_the_converter() -> None:
+    """MET008 accepts exactly the schemas that the converter accepts."""
+    from chakra.src.converter.pytorch_node import PyTorchNode
+
+    assert set(MetadataRules.SUPPORTED_SCHEMAS) == set(PyTorchNode.SUPPORTED_VERSIONS)
+
+
+def test_unsupported_schema_is_reported_on_pytorch_traces_only() -> None:
+    bad: dict[str, object] = {"version": "0.0.4", "schema": "9.9.9-chakra.0.0.4"}
+    for schema in MetadataRules.SUPPORTED_SCHEMAS:
+        assert "MET008" not in hits_of({**bad, "schema": schema}, pytorch=True)
+    assert hits_of(bad, pytorch=True)["MET008"] == {"value": "9.9.9-chakra.0.0.4"}
+    assert "MET008" not in hits_of(bad, pytorch=False)

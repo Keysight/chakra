@@ -129,6 +129,15 @@ message = "global metadata finish_ts {finish} precedes start_ts {start}"
 consumer_impact = { replay = "READY", simulator = "READY", analysis = "LIMITED" }
 
 [[rule]]
+id = "MET008"
+name = "meta-unsupported-schema"
+description = "The schema attribute of a PyTorch-derived trace names a PyTorch execution trace format that the Chakra converter does not support. The converter rejects such a trace, so this one came from another or a newer converter. Readers may misread its attributes."
+enabled = true
+severity = "warning"
+message = "global metadata schema {value} is not supported by the converter"
+consumer_impact = { replay = "REVIEW", simulator = "REVIEW", analysis = "REVIEW" }
+
+[[rule]]
 id = "DAG001"
 name = "dag-duplicate-node"
 description = "Two or more nodes share one ID. Dependencies become ambiguous, so the graph cannot be trusted."
@@ -321,6 +330,15 @@ description = "A communication node declares a comm_size of zero. Replay and sim
 enabled = true
 severity = "error"
 message = "zero comm_size"
+consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "REVIEW" }
+
+[[rule]]
+id = "COM008"
+name = "comm-unknown-type"
+description = "A collective node carries a comm_type that the Chakra schema does not define (CollectiveCommType). The converter derives the type from the kernel name and rejects an unknown name, so this value came from another producer. Replay and simulation cannot tell which collective to run."
+enabled = true
+severity = "error"
+message = "comm_type is not a defined collective type"
 consumer_impact = { replay = "NOT SUITABLE", simulator = "NOT SUITABLE", analysis = "REVIEW" }
 
 # Operators

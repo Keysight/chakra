@@ -26,6 +26,16 @@ class MetadataRules(RuleFamily):
     MET005 = "MET005"  # start_ts
     MET006 = "MET006"  # finish_ts
     MET007 = "MET007"  # finish_ts before start_ts
+    MET008 = "MET008"  # schema the converter does not support
+
+    # Schema values the converter accepts; a test pins them to PyTorchNode
+    SUPPORTED_SCHEMAS = (
+        "1.0.2-chakra.0.0.4",
+        "1.0.3-chakra.0.0.4",
+        "1.1.0-chakra.0.0.4",
+        "1.1.1-chakra.0.0.4",
+        "1.1.1-chakra.1.0.0",
+    )
 
     # Global metadata attributes the PyTorch converter writes, by rule
     METADATA_ATTRS = {
@@ -81,4 +91,12 @@ class MetadataRules(RuleFamily):
         start, finish = index.header.get("start_ts"), index.header.get("finish_ts")
         if index.pytorch_nodes and isinstance(start, int) and isinstance(finish, int) and finish < start:
             return [Hit(self.MET007, [], {"start": start, "finish": finish})]
+        return []
+
+    @rule(MET008)
+    def unsupported_schema(self, index: TraceIndex) -> list[Hit]:
+        """Report a schema value that the converter does not support."""
+        value = index.header.get("schema")
+        if index.pytorch_nodes and isinstance(value, str) and value not in self.SUPPORTED_SCHEMAS:
+            return [Hit(self.MET008, [], {"value": value})]
         return []

@@ -116,3 +116,16 @@ def test_disabled_rule_emits_nothing_and_changes_no_other(off) -> None:
         hits, _ = run(CommRules({off}), built)
         got = {(h.rule, h.node_type): h.values["count"] for h in hits}
         assert got == {k: v for k, v in spec(nodes).items() if k[0] != off}
+
+
+@pytest.mark.parametrize(("comm_type", "flagged"), [(0, False), (9, False), (10, True), (-1, True)])
+def test_comm_type_must_be_defined_by_the_schema(comm_type: int, flagged: bool) -> None:
+    """COM008 flags a collective whose comm_type the schema does not define."""
+    attrs = {"comm_type": comm_type, "comm_size": 8, "pg_name": "g"}
+    found = hits_of([(COMM_COLL_NODE, attrs)])
+    assert (("COM008", COMM_COLL_NODE) in found) is flagged
+
+
+def test_comm_type_is_not_checked_on_point_to_point_nodes() -> None:
+    attrs = {"comm_type": 99, "comm_size": 8, "comm_src": 0, "comm_dst": 1}
+    assert not hits_of([(COMM_SEND_NODE, attrs)])

@@ -30,7 +30,7 @@ SCAN_BLOCK = 1 << 22
 DEFAULT_STREAM = 0
 
 # Integer attributes whose values rules read
-INT_ATTRS = ("rf_id", "scope", "fw_tid", "fw_parent", "comm_size")
+INT_ATTRS = ("rf_id", "scope", "fw_tid", "fw_parent", "comm_size", "comm_type")
 
 # Attributes only PyTorch-derived traces carry; synthetic traces lack them
 PYTORCH_ATTRS = ("rf_id", "tid")

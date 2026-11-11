@@ -7,7 +7,14 @@ Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
 from collections import Counter
 from collections.abc import Iterable
 
-from chakra.schema.protobuf.et_def_pb2 import COMM_COLL_NODE, COMM_RECV_NODE, COMM_SEND_NODE, COMP_NODE, Node
+from chakra.schema.protobuf.et_def_pb2 import (
+    COMM_COLL_NODE,
+    COMM_RECV_NODE,
+    COMM_SEND_NODE,
+    COMP_NODE,
+    CollectiveCommType,
+    Node,
+)
 
 try:
     from .index_builder import TraceIndex
@@ -33,6 +40,7 @@ class CommRules(RuleFamily):
     COM005 = "COM005"  # missing comm_src
     COM006 = "COM006"  # missing comm_dst
     COM007 = "COM007"  # zero comm_size
+    COM008 = "COM008"  # comm_type outside the schema enum
 
     # Attributes every collective node must carry for replay
     COLL_ATTRS = ("comm_type", "comm_size", "pg_name")
@@ -40,6 +48,9 @@ class CommRules(RuleFamily):
     # Point-to-point nodes must declare a nonzero transfer size and both peers
     P2P_TYPES = (COMM_SEND_NODE, COMM_RECV_NODE)
     P2P_ATTRS = ("comm_size", "comm_src", "comm_dst")
+
+    # comm_type values that the Chakra schema defines
+    COMM_TYPES = frozenset(CollectiveCommType.values())
 
     # Report order of node types
     TYPE_ORDER = (COMM_COLL_NODE, *P2P_TYPES)
@@ -72,6 +83,9 @@ class CommRules(RuleFamily):
         missing = [name for name in required if not index.has_attr(node_id, name)]
         if index.int_attrs.get("comm_size", {}).get(node_id) == 0:
             missing.append("zero_size")
+        comm_type = index.int_attrs.get("comm_type", {}).get(node_id)
+        if node_type == COMM_COLL_NODE and comm_type is not None and comm_type not in self.COMM_TYPES:
+            missing.append("unknown_type")
         self.missing[node_type].update(missing)
         for name in missing:
             add_sample(self.ids, (node_type, name), node_id)  # type: ignore[arg-type]
@@ -120,6 +134,11 @@ class CommRules(RuleFamily):
     def zero_size(self, index: TraceIndex) -> list[Hit]:
         """Report communication nodes that declare a size of zero."""
         return self.missing_hits(self.COM007, "zero_size")
+
+    @rule(COM008)
+    def unknown_type(self, index: TraceIndex) -> list[Hit]:
+        """Report collectives whose comm_type the schema does not define."""
+        return self.missing_hits(self.COM008, "unknown_type")
 
     def finish(self, index: TraceIndex) -> list[Hit]:
         """Run the checks, then group findings by node type in report order."""
