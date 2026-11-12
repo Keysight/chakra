@@ -309,6 +309,10 @@ class ReplayRules(RuleFamily):
                     self.missing_ops += 1
                     self.op_families.add(name, op_id)
 
+    def facts(self) -> dict[str, object]:
+        """Report the compute nodes that carry an op_schema."""
+        return {"schema": self.comp_schema}
+
     def finish(self, index: TraceIndex) -> list[Hit]:
         """Resolve replay units once, then run the checks."""
         self.resolve(index)

@@ -100,6 +100,9 @@ class RuleFamily:
     # Report position among families; lower runs first, integrity first
     order: int = 100
 
+    # A gate family grades first; its fatal findings stop the scan
+    gate: bool = False
+
     # Node types `add` needs; None means every node. Others skip the call.
     node_types: frozenset[int] | None = None
 
@@ -141,6 +144,13 @@ class RuleFamily:
 
     def add(self, node: Node) -> None:
         """Update accumulators from one node."""
+
+    def resolve(self, index: "TraceIndex") -> None:
+        """Derive facts that need the whole index; runs once, before `finish`."""
+
+    def facts(self) -> Mapping[str, object]:
+        """Return trace-wide message placeholders this family counted."""
+        return {}
 
     def finish(self, index: "TraceIndex") -> list[Hit]:
         """Run each enabled rule's check over the shared index."""

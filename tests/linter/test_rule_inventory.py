@@ -114,3 +114,17 @@ def test_family_orders_are_unique_and_integrity_leads() -> None:
     orders = [f.order for f in rule_family.FAMILIES]
     assert len(orders) == len(set(orders))
     assert min(rule_family.FAMILIES, key=lambda f: f.order).__name__ == "MetadataRules"
+
+
+def test_gate_family_is_metadata_and_runs_first() -> None:
+    """Only the integrity family gates the scan, and it leads the report."""
+    from chakra.src.linter import rule_family
+
+    gates = [f for f in rule_family.FAMILIES if f.gate]
+    assert [f.__name__ for f in gates] == ["MetadataRules"]
+    assert gates[0].order == min(f.order for f in rule_family.FAMILIES)
+
+
+def test_driver_has_no_family_type_lookup() -> None:
+    """The scan loops over families uniformly, with no isinstance lookup."""
+    assert "isinstance" not in (ROOT / "linter.py").read_text()

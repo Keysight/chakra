@@ -21,8 +21,7 @@ from .consumer import (
 )
 from .index_builder import IndexBuilder
 from .messages import TRACE_VALUES, Message, Messages, default_messages, remember, render, rule_messages
-from .metadata_rules import MetadataRules
-from .replay_rules import ReplayRules, exempt_matcher
+from .replay_rules import exempt_matcher
 from .reports import CLI_FORMATS, REPORT_FORMATS, rule_inventory, stylish_block, stylish_summary, trace_findings
 from .rule_config import Rule, RuleConfigError, apply_overrides, expand_selectors, read_settings
 from .rule_family import ERROR, FATAL, INFO, PASSED, Hit, build_families
@@ -78,28 +77,29 @@ def scan_trace(
     skip = exempt_matcher(default_exempt() if exempt is None else exempt)
     # Registered families in report order: findings list in this order
     families = build_families(disabled, skip)
-    integrity = next(f for f in families if isinstance(f, MetadataRules))
-    replay = next(f for f in families if isinstance(f, ReplayRules))
+    gates = [f for f in families if f.gate]
+    others = [f for f in families if not f.gate]
     result = TraceResult()
     index = IndexBuilder(path, on_progress, AttributeRules.ATTR_KINDS, families).build()
     result.type_counts, result.elapsed = index.type_counts, index.elapsed
     result.pytorch_nodes = index.pytorch_nodes
-    replay.resolve(index)
+    for family in families:
+        family.resolve(index)
     result.total = result.type_counts.total()
     header = index.header
     remember(start=header.get("start_ts"), finish=header.get("finish_ts"))
-    remember(total=result.total, schema=replay.comp_schema)
+    remember(total=result.total, **{k: v for f in families for k, v in f.facts().items()})
     # No capture markers and no device data: generated, so no merge applies
     result.synthetic = index.synthetic
     # A fatal hit (MET009, MET010) stops the scan before grading
-    hits = resolve_severity(integrity.finish(index), rules)
+    hits = resolve_severity([h for f in gates for h in f.finish(index)], rules)
     fatal = [h for h in hits if h.severity == FATAL]
     if fatal:
         result.problems += [render(messages, h.rule, **h.values) for h in fatal]
         result.fatal_rule = fatal[0].rule
         return result
     # Metadata and integrity ran first; the rest follow in report order
-    hits += resolve_severity([h for f in families if f is not integrity for h in f.finish(index)], rules)
+    hits += resolve_severity([h for f in others for h in f.finish(index)], rules)
     for hit in hits:
         message = render(messages, hit.rule, **hit.values)
         if hit.severity != PASSED:

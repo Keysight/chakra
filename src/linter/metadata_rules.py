@@ -20,6 +20,7 @@ class MetadataRules(RuleFamily):
 
     # Leads the report: the fatal rules MET009 and MET010 run before the others
     order = 10
+    gate = True
 
     # Rule IDs; each names the `@rule` that declares it
     MET001 = "MET001"  # version: required, every trace
