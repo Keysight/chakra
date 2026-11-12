@@ -2,14 +2,12 @@
 
 from pathlib import Path
 
-import index_builder
-import linter
 import pytest
-import rule_family
 from chakra.schema.protobuf.et_def_pb2 import Node
-from dag_rules import DagRules
+from chakra.src.linter import index_builder, linter, rule_family
+from chakra.src.linter.dag_rules import DagRules
+from chakra.src.linter.index_builder import IndexBuilder
 from families import write_trace
-from index_builder import IndexBuilder
 
 
 def node(node_id: int, ctrl: tuple[int, ...] = (), data: tuple[int, ...] = ()) -> Node:

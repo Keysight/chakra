@@ -4,7 +4,7 @@ from itertools import product
 
 import pytest
 from chakra.schema.protobuf.et_def_pb2 import COMM_COLL_NODE, COMM_RECV_NODE, COMM_SEND_NODE, COMP_NODE
-from comm_rules import CommRules
+from chakra.src.linter.comm_rules import CommRules
 from families import node, run
 
 SIZES = (None, 0, 8)  # absent, zero, nonzero comm_size

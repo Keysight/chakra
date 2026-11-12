@@ -8,18 +8,8 @@ from contextvars import ContextVar
 from functools import cache
 from importlib.metadata import PackageNotFoundError, version
 
-try:
-    from .index_builder import DEFAULT_STREAM
-    from .rule_config import DEFAULT_RULES, Rule, RuleConfigError, load_rules, master_placeholders
-except ImportError:  # run as a top-level module, not a package
-    from index_builder import DEFAULT_STREAM  # type: ignore[no-redef]
-    from rule_config import (  # type: ignore[no-redef]
-        DEFAULT_RULES,
-        Rule,
-        RuleConfigError,
-        load_rules,
-        master_placeholders,
-    )
+from .index_builder import DEFAULT_STREAM
+from .rule_config import DEFAULT_RULES, Rule, RuleConfigError, load_rules, master_placeholders
 
 # Message template per rule ID, as loaded from the rule file
 Messages = dict[str, str]

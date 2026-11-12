@@ -3,8 +3,8 @@
 from itertools import product
 
 import pytest
-from attribute_rules import AttributeRules
 from chakra.schema.protobuf.et_def_pb2 import AttributeProto
+from chakra.src.linter.attribute_rules import AttributeRules
 from families import attr, node, run
 
 CPU = {"is_cpu_op": True, "rf_id": 1, "fw_parent": 1, "seq_id": 1, "scope": 1, "tid": 1, "fw_tid": 1}

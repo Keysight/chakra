@@ -2,8 +2,7 @@
 
 from pathlib import Path
 
-import linter
-import replay_rules
+from chakra.src.linter import linter, replay_rules
 
 
 def test_exempt_matcher_uses_shell_patterns() -> None:

@@ -15,10 +15,7 @@ from typing import BinaryIO, cast
 from chakra.schema.protobuf.et_def_pb2 import GlobalMetadata, Node
 from chakra.src.third_party.utils.protolib import decodeMessage, openFileRd
 
-try:
-    from .rule_family import RuleFamily
-except ImportError:  # run as a top-level module, not a package
-    from rule_family import RuleFamily  # type: ignore[no-redef]
+from .rule_family import RuleFamily
 
 # Node count between progress callbacks
 PROGRESS_STEP = 50_000

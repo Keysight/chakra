@@ -3,11 +3,8 @@
 import ast
 from pathlib import Path
 
-import linter
-import messages
 import pytest
-import reports
-import rule_config
+from chakra.src.linter import linter, messages, reports, rule_config
 
 ROOT = Path(__file__).resolve().parents[2] / "src" / "linter"
 
@@ -98,7 +95,7 @@ def test_unknown_placeholder_is_a_config_error() -> None:
 
 def test_every_rule_has_an_owner(shipped_rules) -> None:
     """Each rule of the file belongs to one family."""
-    import rule_family
+    from chakra.src.linter import rule_family
 
     owned = {rule for family in rule_family.FAMILIES for rule in family.checks}
     assert owned == set(shipped_rules)
@@ -106,16 +103,16 @@ def test_every_rule_has_an_owner(shipped_rules) -> None:
 
 def test_every_rules_module_registers_a_family() -> None:
     """A *_rules.py module that registers nothing never runs in a scan."""
-    import rule_family
+    from chakra.src.linter import rule_family
 
-    modules = {f.__module__ for f in rule_family.FAMILIES}
+    modules = {f.__module__.rpartition(".")[2] for f in rule_family.FAMILIES}
     files = {p.stem for p in Path(linter.__file__).parent.glob("*_rules.py")}
     assert files == modules
 
 
 def test_family_orders_are_unique_and_integrity_leads() -> None:
     """Report order is explicit: no ties, metadata and integrity first."""
-    import rule_family
+    from chakra.src.linter import rule_family
 
     orders = [f.order for f in rule_family.FAMILIES]
     assert len(orders) == len(set(orders))

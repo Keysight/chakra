@@ -7,8 +7,8 @@ import tomllib
 from pathlib import Path
 
 import jsonschema
-import linter
 import pytest
+from chakra.src.linter import linter
 
 RULES_FILE = linter.DEFAULT_RULES
 SCHEMA_FILE = RULES_FILE.with_name("rules.schema.json")

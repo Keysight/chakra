@@ -9,14 +9,9 @@ from dataclasses import dataclass, field
 
 from chakra.schema.protobuf.et_def_pb2 import NodeType
 
-try:
-    from .rule_config import Consumer, shipped_consumers, shipped_rules
-    from .rule_family import Hit
-    from .sampling import SAMPLE_LIMIT
-except ImportError:  # run as a top-level module, not a package
-    from rule_config import Consumer, shipped_consumers, shipped_rules  # type: ignore[no-redef]
-    from rule_family import Hit  # type: ignore[no-redef]
-    from sampling import SAMPLE_LIMIT  # type: ignore[no-redef]
+from .rule_config import Consumer, shipped_consumers, shipped_rules
+from .rule_family import Hit
+from .sampling import SAMPLE_LIMIT
 
 # Consumers a trace may serve; each reports its own impact
 REPLAY, SIMULATOR, ANALYSIS = "replay", "simulator", "analysis"

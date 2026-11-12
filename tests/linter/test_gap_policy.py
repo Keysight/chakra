@@ -1,11 +1,8 @@
 """Hits become gaps with the consumer levels that the rule implies."""
 
-import consumer
-import linter
-import messages
 import pytest
-import rule_config
-from rule_family import Hit
+from chakra.src.linter import consumer, linter, messages, rule_config
+from chakra.src.linter.rule_family import Hit
 
 
 def gap(rule: str) -> consumer.Gap:
@@ -15,7 +12,7 @@ def gap(rule: str) -> consumer.Gap:
 
 
 def test_every_family_gap_rule_is_a_gap_in_the_toml() -> None:
-    import rule_family
+    from chakra.src.linter import rule_family
 
     notes = {"OPS002", "MET012"}  # notes, not gaps
     needed = {rule for family in rule_family.FAMILIES for rule in family.checks} - notes
@@ -70,7 +67,7 @@ def test_info_and_pass_hits_lower_no_consumer_level(tmp_path, monkeypatch, sever
     """Grading ignores info and pass hits, as it ignores a rule with no hit."""
     from dataclasses import replace
 
-    import rule_family
+    from chakra.src.linter import rule_family
     from families import node, write_trace
 
     path = write_trace(tmp_path / "t.et", [node(i) for i in (1, 2, 3)])

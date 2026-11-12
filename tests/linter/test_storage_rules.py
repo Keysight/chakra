@@ -3,8 +3,8 @@
 import pytest
 from chakra.schema.protobuf.et_def_pb2 import COMP_NODE, DATA_OP_NODE, STORAGE_NODE, DataOpType, Node
 from chakra.schema.protobuf.storage_pb2 import BlockOp, FsOp, PageOp, StorageInfo, StorageLevel
+from chakra.src.linter.storage_rules import StorageRules
 from families import run
-from storage_rules import StorageRules
 
 FS, PAGE, BLOCK = StorageLevel.STORAGE_LEVEL_FS, StorageLevel.STORAGE_LEVEL_PAGE, StorageLevel.STORAGE_LEVEL_BLOCK
 DEVICE = StorageLevel.STORAGE_LEVEL_DEVICE

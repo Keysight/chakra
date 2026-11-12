@@ -2,9 +2,8 @@
 
 from pathlib import Path
 
-import linter
-import rule_config
 from chakra.schema.protobuf.et_def_pb2 import AttributeProto, Node
+from chakra.src.linter import linter, rule_config
 from families import write_trace
 
 Attr = AttributeProto

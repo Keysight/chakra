@@ -11,16 +11,10 @@ from typing import TYPE_CHECKING, TypeVar
 
 from chakra.schema.protobuf.et_def_pb2 import Node
 
-try:
-    from .rule_config import RuleConfigError, shipped_rules
-except ImportError:  # run as a top-level module, not a package
-    from rule_config import RuleConfigError, shipped_rules  # type: ignore[no-redef]
+from .rule_config import RuleConfigError, shipped_rules
 
 if TYPE_CHECKING:
-    try:
-        from .index_builder import TraceIndex
-    except ImportError:
-        from index_builder import TraceIndex  # type: ignore[no-redef]
+    from .index_builder import TraceIndex
 
 # Rule ID: two or three capital letters and three digits, such as DAG001
 RULE_ID = re.compile(r"[A-Z]{2,3}[0-9]{3}")

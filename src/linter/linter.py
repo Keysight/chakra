@@ -10,70 +10,27 @@ from collections.abc import Callable, Sequence
 from functools import cache
 from pathlib import Path
 
-try:
-    from . import (
-        comm_rules,  # noqa: F401  (registers its family)
-        dag_rules,  # noqa: F401  (registers its family)
-        kineto_rules,  # noqa: F401  (registers its family)
-        metadata_rules,  # noqa: F401  (registers its family)
-        storage_rules,  # noqa: F401  (registers its family)
-    )
-    from .attribute_rules import AttributeRules
-    from .consumer import (
-        Finding,
-        Gap,
-        Issue,
-        TraceResult,
-    )
-    from .index_builder import IndexBuilder
-    from .messages import TRACE_VALUES, Message, Messages, default_messages, remember, render, rule_messages
-    from .metadata_rules import MetadataRules
-    from .replay_rules import ReplayRules, exempt_matcher
-    from .reports import CLI_FORMATS, REPORT_FORMATS, rule_inventory, stylish_block, stylish_summary, trace_findings
-    from .rule_config import DEFAULT_RULES, FATAL_RULES, Rule, RuleConfigError, load_rules, shipped_rules
-    from .rule_family import ERROR, FATAL, INFO, PASSED, Hit, build_families
-except ImportError:  # run as a top-level module, not a package
-    import comm_rules  # noqa: F401  (registers its family)
-    import dag_rules  # noqa: F401  (registers its family)
-    import kineto_rules  # noqa: F401  (registers its family)
-    import metadata_rules  # noqa: F401  (registers its family)
-    import storage_rules  # noqa: F401  (registers its family)
-    from attribute_rules import AttributeRules  # type: ignore[no-redef]
-    from consumer import (  # type: ignore[no-redef]
-        Finding,
-        Gap,
-        Issue,
-        TraceResult,
-    )
-    from index_builder import IndexBuilder  # type: ignore[no-redef]
-    from messages import (  # type: ignore[no-redef]
-        TRACE_VALUES,
-        Message,
-        Messages,
-        default_messages,
-        remember,
-        render,
-        rule_messages,
-    )
-    from metadata_rules import MetadataRules  # type: ignore[no-redef]
-    from replay_rules import ReplayRules, exempt_matcher  # type: ignore[no-redef]
-    from reports import (  # type: ignore[no-redef]
-        CLI_FORMATS,
-        REPORT_FORMATS,
-        rule_inventory,
-        stylish_block,
-        stylish_summary,
-        trace_findings,
-    )
-    from rule_config import (  # type: ignore[no-redef]
-        DEFAULT_RULES,
-        FATAL_RULES,
-        Rule,
-        RuleConfigError,
-        load_rules,
-        shipped_rules,
-    )
-    from rule_family import ERROR, FATAL, INFO, PASSED, Hit, build_families  # type: ignore[no-redef]
+from . import (
+    comm_rules,  # noqa: F401  (registers its family)
+    dag_rules,  # noqa: F401  (registers its family)
+    kineto_rules,  # noqa: F401  (registers its family)
+    metadata_rules,  # noqa: F401  (registers its family)
+    storage_rules,  # noqa: F401  (registers its family)
+)
+from .attribute_rules import AttributeRules
+from .consumer import (
+    Finding,
+    Gap,
+    Issue,
+    TraceResult,
+)
+from .index_builder import IndexBuilder
+from .messages import TRACE_VALUES, Message, Messages, default_messages, remember, render, rule_messages
+from .metadata_rules import MetadataRules
+from .replay_rules import ReplayRules, exempt_matcher
+from .reports import CLI_FORMATS, REPORT_FORMATS, rule_inventory, stylish_block, stylish_summary, trace_findings
+from .rule_config import DEFAULT_RULES, FATAL_RULES, Rule, RuleConfigError, load_rules, shipped_rules
+from .rule_family import ERROR, FATAL, INFO, PASSED, Hit, build_families
 
 
 def lint_trace(
@@ -361,7 +318,3 @@ def main(argv: list[str] | None = None) -> int:
         print(stylish_summary(results, color))
     # Nonzero exit on any error, as linters do, so CI can gate on it
     return 1 if any(f.severity == ERROR for _, r in results for f in trace_findings(r)) else 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

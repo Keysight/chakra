@@ -9,15 +9,9 @@ from collections.abc import Iterable
 
 from chakra.schema.protobuf.et_def_pb2 import COMM_COLL_NODE, COMM_RECV_NODE, COMM_SEND_NODE, COMP_NODE, Node
 
-try:
-    from .index_builder import DEFAULT_STREAM, TraceIndex
-    from .rule_family import Hit, RuleFamily, register, rule
-    from .sampling import add_sample, keep_sample, tally
-except ImportError:  # run as a top-level module, not a package
-    from index_builder import DEFAULT_STREAM, TraceIndex  # type: ignore[no-redef]
-    from rule_family import Hit, RuleFamily, register, rule  # type: ignore[no-redef]
-    from sampling import add_sample, keep_sample, tally  # type: ignore[no-redef]
-
+from .index_builder import DEFAULT_STREAM, TraceIndex
+from .rule_family import Hit, RuleFamily, register, rule
+from .sampling import add_sample, keep_sample, tally
 
 # Share of zero-duration nodes above which timing is absent for a trace
 ZERO_WARN_RATIO = 0.5

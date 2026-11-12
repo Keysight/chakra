@@ -9,14 +9,9 @@ from itertools import chain
 
 from chakra.schema.protobuf.et_def_pb2 import Node
 
-try:
-    from .index_builder import TraceIndex
-    from .rule_family import Hit, RuleFamily, register, rule
-    from .sampling import keep_sample, tally
-except ImportError:  # run as a top-level module, not a package
-    from index_builder import TraceIndex  # type: ignore[no-redef]
-    from rule_family import Hit, RuleFamily, register, rule  # type: ignore[no-redef]
-    from sampling import keep_sample, tally  # type: ignore[no-redef]
+from .index_builder import TraceIndex
+from .rule_family import Hit, RuleFamily, register, rule
+from .sampling import keep_sample, tally
 
 
 @register

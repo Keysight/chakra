@@ -3,9 +3,9 @@
 from itertools import product
 
 from chakra.schema.protobuf.et_def_pb2 import NodeType
+from chakra.src.linter.index_builder import IndexBuilder
+from chakra.src.linter.metadata_rules import MetadataRules
 from families import node, run
-from index_builder import IndexBuilder
-from metadata_rules import MetadataRules
 
 TIMES = (None, 5, 10, "late")  # start_ts or finish_ts: absent, early, late, text
 # The header tests leave out the integrity rules MET009 to MET012

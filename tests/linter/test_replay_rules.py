@@ -4,8 +4,8 @@ from itertools import product
 
 import pytest
 from chakra.schema.protobuf.et_def_pb2 import COMM_COLL_NODE, COMP_NODE
+from chakra.src.linter.replay_rules import ReplayRules
 from families import node, run
-from replay_rules import ReplayRules
 
 SCHEMA = "aten::add(Tensor a) -> Tensor"  # one argument
 OK_IO = {"values": "[1]", "shapes": "[[1]]", "types": "['T']"}

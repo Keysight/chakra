@@ -7,52 +7,30 @@ Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
 import html
 import json
 import re
-import sys
 from collections import Counter
 from datetime import date
 from functools import cache
 from pathlib import Path
 
-try:
-    from .consumer import (
-        CONSUMER_LABELS,
-        CONSUMERS,
-        LIMITED,
-        NOT_SUITABLE,
-        READY,
-        REVIEW,
-        Finding,
-        TraceResult,
-    )
-    from .messages import (
-        Messages,
-        chakra_version,
-        package_version,
-        rule_messages,
-    )
-    from .rule_config import Rule, load_rules
-    from .rule_family import ERROR, INFO, WARNING
-    from .sampling import SAMPLE_LIMIT
-except ImportError:  # run as a top-level module, not a package
-    from consumer import (  # type: ignore[no-redef]
-        CONSUMER_LABELS,
-        CONSUMERS,
-        LIMITED,
-        NOT_SUITABLE,
-        READY,
-        REVIEW,
-        Finding,
-        TraceResult,
-    )
-    from messages import (  # type: ignore[no-redef]
-        Messages,
-        chakra_version,
-        package_version,
-        rule_messages,
-    )
-    from rule_config import Rule, load_rules  # type: ignore[no-redef]
-    from rule_family import ERROR, INFO, WARNING  # type: ignore[no-redef]
-    from sampling import SAMPLE_LIMIT  # type: ignore[no-redef]
+from .consumer import (
+    CONSUMER_LABELS,
+    CONSUMERS,
+    LIMITED,
+    NOT_SUITABLE,
+    READY,
+    REVIEW,
+    Finding,
+    TraceResult,
+)
+from .messages import (
+    Messages,
+    chakra_version,
+    package_version,
+    rule_messages,
+)
+from .rule_config import Rule, load_rules
+from .rule_family import ERROR, INFO, WARNING
+from .sampling import SAMPLE_LIMIT
 
 # A ready status needs no reader attention; the rest are bold
 PLAIN_STATUSES = {READY}
@@ -492,10 +470,8 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 2rem 0; }
 
 def render_html(report: str) -> str:
     """Convert the markdown report into a standalone HTML page."""
-    try:
-        import markdown
-    except ImportError:
-        sys.exit("HTML reports need the markdown package: pip install markdown")
+    import markdown
+
     body = markdown.markdown(report, extensions=["tables", "toc"])
     return (
         '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'

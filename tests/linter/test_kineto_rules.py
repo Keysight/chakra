@@ -3,12 +3,12 @@
 from itertools import product
 from pathlib import Path
 
-import linter
 import pytest
 from chakra.schema.protobuf.et_def_pb2 import COMM_COLL_NODE, COMP_NODE, Node
+from chakra.src.linter import linter
+from chakra.src.linter.index_builder import TraceIndex
+from chakra.src.linter.kineto_rules import CHECKED_TYPES, KinetoRules
 from families import node, run, write_trace
-from index_builder import TraceIndex
-from kineto_rules import CHECKED_TYPES, KinetoRules
 
 # A node: None (no stream data) or (stream, duration, parent IDs)
 STREAMS = (0, 3)

@@ -2,11 +2,10 @@
 
 from pathlib import Path
 
-import index_builder
-import linter
 import pytest
+from chakra.src.linter import index_builder, linter
+from chakra.src.linter.messages import chakra_version, default_messages, render, rule_messages
 from families import node, write_trace
-from messages import chakra_version, default_messages, render, rule_messages
 
 
 def trace(path: Path, count: int, pad: int = 0) -> Path:

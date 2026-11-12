@@ -15,14 +15,9 @@ from chakra.schema.protobuf.et_def_pb2 import (
 )
 from chakra.schema.protobuf.storage_pb2 import BlockOp, FsOp, PageOp, StorageLevel
 
-try:
-    from .index_builder import TraceIndex
-    from .rule_family import Hit, RuleFamily, register, rule
-    from .sampling import add_sample
-except ImportError:  # run as a top-level module, not a package
-    from index_builder import TraceIndex  # type: ignore[no-redef]
-    from rule_family import Hit, RuleFamily, register, rule  # type: ignore[no-redef]
-    from sampling import add_sample  # type: ignore[no-redef]
+from .index_builder import TraceIndex
+from .rule_family import Hit, RuleFamily, register, rule
+from .sampling import add_sample
 
 # Oneof field of Node that carries type-specific information
 OP_INFO = "op_info"

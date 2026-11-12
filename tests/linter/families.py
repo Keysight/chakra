@@ -2,11 +2,11 @@
 
 from pathlib import Path
 
-from attribute_rules import AttributeRules
 from chakra.schema.protobuf.et_def_pb2 import COMP_NODE, AttributeProto, GlobalMetadata, Node
+from chakra.src.linter.attribute_rules import AttributeRules
+from chakra.src.linter.index_builder import IndexBuilder, TraceIndex
+from chakra.src.linter.rule_family import Hit, RuleFamily
 from chakra.src.third_party.utils.protolib import encodeMessage
-from index_builder import IndexBuilder, TraceIndex
-from rule_family import Hit, RuleFamily
 
 
 def attr(name: str, value: object) -> AttributeProto:
