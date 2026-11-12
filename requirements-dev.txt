@@ -2,7 +2,6 @@ pyright==1.1.359
 pytest==8.1.1
 ruff==0.3.7
 vulture==2.11
-jsonschema==4.21.1
 markdown==3.11.2
 build==1.6.1
 twine==7.0.0

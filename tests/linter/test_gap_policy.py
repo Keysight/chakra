@@ -2,6 +2,7 @@
 
 import pytest
 from chakra.src.linter import consumer, linter, messages, rule_config
+from chakra.src.linter.catalog import shipped_rules
 from chakra.src.linter.rule_family import Hit
 
 
@@ -11,14 +12,14 @@ def gap(rule: str) -> consumer.Gap:
     return consumer.Gap.from_hit(hit, messages.render(messages.default_messages(), rule, **hit.values))
 
 
-def test_every_family_gap_rule_is_a_gap_in_the_toml() -> None:
+def test_every_family_gap_rule_is_a_gap_in_the_catalog() -> None:
     from chakra.src.linter import rule_family
 
     notes = {"OPS002", "MET012"}  # notes, not gaps
     needed = {rule for family in rule_family.FAMILIES for rule in family.checks} - notes
     # Fatal findings stop the scan before grading
     needed -= {"MET009", "MET010"}
-    rules = rule_config.shipped_rules()
+    rules = shipped_rules()
     assert {r for r in needed if rules[r].is_gap()} == needed
 
 
@@ -32,17 +33,17 @@ def test_each_case_is_its_own_rule_with_a_flat_consumer_impact() -> None:
 
 
 def test_consumer_impact_values_are_levels_never_tables() -> None:
-    for rule in rule_config.shipped_rules().values():
+    for rule in shipped_rules().values():
         assert all(isinstance(v, str) for v in rule.consumer_impact.values()), rule.id
 
 
 def test_every_rule_declares_a_consumer_impact_for_all_three_consumers() -> None:
-    for rule in rule_config.shipped_rules().values():
+    for rule in shipped_rules().values():
         assert list(rule.consumer_impact) == ["replay", "simulator", "analysis"], rule.id
 
 
 def test_consumer_impact_is_ready_exactly_when_the_rule_cannot_lower_a_consumer() -> None:
-    for rule in rule_config.shipped_rules().values():
+    for rule in shipped_rules().values():
         ready = set(rule.consumer_impact.values()) == {"READY"}
         assert ready == (rule.severity in ("info", "pass")), rule.id
 
@@ -53,32 +54,20 @@ def test_aggregates_cover_the_three_consumers_in_order() -> None:
     assert [a.id for a in shipped.values()] == ["SUI001", "SUI002", "SUI003"]
 
 
-def test_consumer_impact_naming_an_unknown_consumer_is_rejected(tmp_path) -> None:
-    text = rule_config.DEFAULT_RULES.read_text(encoding="utf-8")
-    text = text.replace("consumer_impact = { replay", "consumer_impact = { toaster", 1)
-    path = tmp_path / "rules.toml"
-    path.write_text(text, encoding="utf-8")
+def test_consumer_impact_naming_an_unknown_consumer_is_rejected() -> None:
     with pytest.raises(rule_config.RuleConfigError, match="toaster"):
-        rule_config.load_rules(path)
+        rule_config.apply_overrides(shipped_rules(), ["DAG001.consumer_impact.toaster=READY"])
 
 
 @pytest.mark.parametrize("severity", ["info", "pass"])
-def test_info_and_pass_hits_lower_no_consumer_level(tmp_path, monkeypatch, severity) -> None:
+def test_info_and_pass_hits_lower_no_consumer_level(tmp_path, severity) -> None:
     """Grading ignores info and pass hits, as it ignores a rule with no hit."""
-    from dataclasses import replace
-
-    from chakra.src.linter import rule_family
     from families import node, write_trace
 
     path = write_trace(tmp_path / "t.et", [node(i) for i in (1, 2, 3)])
     assert linter.lint_trace(path).gaps  # the bare trace has gaps to ignore
-    real = rule_family.RuleFamily.finish
-    monkeypatch.setattr(
-        rule_family.RuleFamily,
-        "finish",
-        lambda self, index: [replace(h, severity=severity) for h in real(self, index)],
-    )
-    result = linter.lint_trace(path)
+    settings = [f"{rule.id}.severity={severity}" for rule in shipped_rules().values() if not rule.required]
+    result = linter.lint_trace(path, rules=rule_config.apply_overrides(shipped_rules(), settings))
     assert not result.gaps
     assert all(result.status(c)[0] == consumer.READY for c in consumer.CONSUMERS)
     assert bool(result.findings) == (severity == "info")

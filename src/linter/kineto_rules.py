@@ -10,6 +10,7 @@ from collections.abc import Iterable
 from chakra.schema.protobuf.et_def_pb2 import COMM_COLL_NODE, COMM_RECV_NODE, COMM_SEND_NODE, COMP_NODE, Node
 
 from .index_builder import DEFAULT_STREAM, TraceIndex
+from .rule_config import ERROR, LIMITED, NOT_SUITABLE, REVIEW, WARNING
 from .rule_family import Hit, RuleFamily, register, rule
 from .sampling import add_sample, keep_sample, tally
 
@@ -34,7 +35,7 @@ class KinetoRules(RuleFamily):
 
     order = 80
 
-    # Rule IDs; each must match an entry in rules.toml
+    # Rule IDs; each names the `@rule` that declares it
     KIN001 = "KIN001"  # no stream attribute on any node
     KIN002 = "KIN002"  # streams present, no durations
     KIN003 = "KIN003"  # device node without host parent
@@ -77,14 +78,37 @@ class KinetoRules(RuleFamily):
         if stream != DEFAULT_STREAM:
             self.device_parents[node_id] = index.ctrl_deps[node_id]
 
-    @rule(KIN001)
+    @rule(
+        KIN001,
+        name="kineto-no-stream",
+        severity=ERROR,
+        message="no node has a stream attribute (no device data); disable KIN001 for CPU-only captures",
+        description=(
+            "No node has a stream attribute. The trace holds no device data, so the host trace was not linked "
+            "to the Kineto device trace. A genuine CPU-only capture also triggers this rule; disable it for "
+            "such traces."
+        ),
+        simulator=REVIEW,
+        analysis=NOT_SUITABLE,
+    )
     def no_streams(self, index: TraceIndex) -> list[Hit]:
         """Report a trace in which no node has a stream attribute."""
         if index.synthetic or self.streams:
             return []
         return [Hit(self.KIN001, self.no_stream_ids, {})]
 
-    @rule(KIN002)
+    @rule(
+        KIN002,
+        name="kineto-no-duration",
+        severity=ERROR,
+        message="stream data present but no node has a duration",
+        description=(
+            "Nodes carry stream data but none has a duration. Device activity was linked without timing, so "
+            "timing analysis is impossible."
+        ),
+        simulator=REVIEW,
+        analysis=NOT_SUITABLE,
+    )
     def no_durations(self, index: TraceIndex) -> list[Hit]:
         """Report streams whose nodes all lack a duration."""
         if index.synthetic or not self.streams or self.timed:
@@ -102,22 +126,69 @@ class KinetoRules(RuleFamily):
             count, sample = tally((n, not any(p in ids for p in ps)) for n, ps in self.device_parents.items())
         return [Hit(rule_id, sample, {"count": count})] if count else []
 
-    @rule(KIN003)
+    @rule(
+        KIN003,
+        name="kineto-orphan",
+        severity=WARNING,
+        message="device node has no host parent",
+        description=(
+            "A device node (a GPU operation on a stream other than 0) has no host parent in the trace, so it "
+            "is an orphan, while some nodes carry durations. The link between host operator and device kernel "
+            "is lost. KIN005 covers a trace without durations."
+        ),
+        simulator=LIMITED,
+        analysis=LIMITED,
+    )
     def orphan_device_nodes(self, index: TraceIndex) -> list[Hit]:
         """Report device nodes with no parent; some nodes carry durations."""
         return self.parent_hit(self.KIN003, multi=False, untimed=False, index=index)
 
-    @rule(KIN004)
+    @rule(
+        KIN004,
+        name="kineto-multi-parent",
+        severity=WARNING,
+        message="device node has multiple host parents",
+        description=(
+            "A device node has more than one host parent, while some nodes carry durations. The link between "
+            "host operator and device kernel is ambiguous. KIN006 covers a trace without durations."
+        ),
+        simulator=LIMITED,
+        analysis=LIMITED,
+    )
     def multi_parent_device_nodes(self, index: TraceIndex) -> list[Hit]:
         """Report device nodes with several parents; some carry durations."""
         return self.parent_hit(self.KIN004, multi=True, untimed=False, index=index)
 
-    @rule(KIN005)
+    @rule(
+        KIN005,
+        name="kineto-orphan-untimed",
+        severity=ERROR,
+        message="device node has no host parent and no node has a duration",
+        description=(
+            "A device node (a GPU operation on a stream other than 0) has no host parent, so it is an orphan, "
+            "and no node carries a duration. The link between host operator and device kernel is lost, and "
+            "the device data holds no timing. KIN003 covers a trace with durations."
+        ),
+        simulator=REVIEW,
+        analysis=NOT_SUITABLE,
+    )
     def orphan_device_nodes_untimed(self, index: TraceIndex) -> list[Hit]:
         """Report device nodes with no parent; no node carries a duration."""
         return self.parent_hit(self.KIN005, multi=False, untimed=True, index=index)
 
-    @rule(KIN006)
+    @rule(
+        KIN006,
+        name="kineto-multi-parent-untimed",
+        severity=ERROR,
+        message="device node has multiple host parents and no node has a duration",
+        description=(
+            "A device node has more than one host parent, and no node carries a duration. The link between "
+            "host operator and device kernel is ambiguous, and the device data holds no timing. KIN004 covers "
+            "a trace with durations."
+        ),
+        simulator=REVIEW,
+        analysis=NOT_SUITABLE,
+    )
     def multi_parent_device_nodes_untimed(self, index: TraceIndex) -> list[Hit]:
         """Report device nodes with several parents; no node carries a duration."""
         return self.parent_hit(self.KIN006, multi=True, untimed=True, index=index)
@@ -133,7 +204,19 @@ class KinetoRules(RuleFamily):
             if node_type in CHECKED_TYPES and self.zero_by_type[node_type] == count
         ]
 
-    @rule(KIN007)
+    @rule(
+        KIN007,
+        name="timing-absent",
+        severity=WARNING,
+        message="zero duration; timing absent",
+        description=(
+            "Timing is absent. More than 50% of all nodes have zero duration, or every node of one checked "
+            "type does (compute, collective, send or receive). The merge of host and device data likely did "
+            "not complete. Analysis cannot use the trace, and the simulator needs review."
+        ),
+        simulator=REVIEW,
+        analysis=NOT_SUITABLE,
+    )
     def timing_absent(self, index: TraceIndex) -> list[Hit]:
         """Report types with no durations first, then trace-wide absence."""
         absent = self.absent_types(index)
@@ -148,7 +231,17 @@ class KinetoRules(RuleFamily):
             hits.append(Hit(self.KIN007, self.zero_node_ids, ratio))
         return hits
 
-    @rule(KIN008)
+    @rule(
+        KIN008,
+        name="timing-partial",
+        severity=WARNING,
+        message="zero duration; timing partial",
+        description=(
+            "Timing is partial. Between 5% and 50% of all nodes have zero duration; healthy traces stay at or "
+            "below 5%. Analysis fidelity drops, while replay and simulation still work."
+        ),
+        analysis=LIMITED,
+    )
     def timing_partial(self, index: TraceIndex) -> list[Hit]:
         """Report a share of zero durations between the partial and absent bars."""
         if index.synthetic or self.absent_types(index):
@@ -157,7 +250,17 @@ class KinetoRules(RuleFamily):
             return []
         return [Hit(self.KIN008, self.zero_node_ids, {"count": self.zero, "total": index.total})]
 
-    @rule(KIN009)
+    @rule(
+        KIN009,
+        name="synthetic-timing-unknown",
+        severity=WARNING,
+        message="zero duration on all nodes; modeled values unknown",
+        description=(
+            "A synthetic (generated) trace has zero duration on every node. The linter cannot tell whether "
+            "the generator models durations, so a reviewer decides whether analysis applies."
+        ),
+        analysis=REVIEW,
+    )
     def synthetic_timing(self, index: TraceIndex) -> list[Hit]:
         """Report a generated trace whose every duration is zero."""
         if index.synthetic and self.zero == index.total:

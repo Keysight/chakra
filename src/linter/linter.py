@@ -7,17 +7,12 @@ Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
 import argparse
 import sys
 from collections.abc import Callable, Sequence
+from dataclasses import replace
 from functools import cache
 from pathlib import Path
 
-from . import (
-    comm_rules,  # noqa: F401  (registers its family)
-    dag_rules,  # noqa: F401  (registers its family)
-    kineto_rules,  # noqa: F401  (registers its family)
-    metadata_rules,  # noqa: F401  (registers its family)
-    storage_rules,  # noqa: F401  (registers its family)
-)
 from .attribute_rules import AttributeRules
+from .catalog import shipped_rules
 from .consumer import (
     Finding,
     Gap,
@@ -29,7 +24,7 @@ from .messages import TRACE_VALUES, Message, Messages, default_messages, remembe
 from .metadata_rules import MetadataRules
 from .replay_rules import ReplayRules, exempt_matcher
 from .reports import CLI_FORMATS, REPORT_FORMATS, rule_inventory, stylish_block, stylish_summary, trace_findings
-from .rule_config import DEFAULT_RULES, FATAL_RULES, Rule, RuleConfigError, load_rules, shipped_rules
+from .rule_config import Rule, RuleConfigError, apply_overrides, expand_selectors, read_settings
 from .rule_family import ERROR, FATAL, INFO, PASSED, Hit, build_families
 
 
@@ -39,6 +34,7 @@ def lint_trace(
     messages: Messages | None = None,
     exempt: Sequence[str] | None = None,
     on_progress: Callable[[int, int], None] | None = None,
+    rules: dict[str, Rule] | None = None,
 ) -> TraceResult:
     """
     Scan one trace; each finding sets an impact per consumer.
@@ -47,13 +43,14 @@ def lint_trace(
     Findings of rules in `disabled` are dropped before grading.
     `messages` holds the report text per rule; the shipped file by default.
     `exempt` lists name patterns of childless CPU annotations needing no schema.
+    `rules` sets severity and consumer impact per rule; the shipped ones by default.
     `on_progress` receives (nodes read, total) every PROGRESS_STEP nodes; the
     total comes from a fast scan once the header decodes.
     """
     values: dict[str, object] = {}
     token = TRACE_VALUES.set(values)
     try:
-        result = scan_trace(path, disabled, messages, exempt, on_progress)
+        result = scan_trace(path, disabled, messages, exempt, on_progress, rules)
     finally:
         TRACE_VALUES.reset(token)
     result.values = values
@@ -73,8 +70,10 @@ def scan_trace(
     messages: Messages | None = None,
     exempt: Sequence[str] | None = None,
     on_progress: Callable[[int, int], None] | None = None,
+    rules: dict[str, Rule] | None = None,
 ) -> TraceResult:
     """Run the scan behind `lint_trace`; trace-wide placeholders go to `remember`."""
+    rules = rules or shipped_rules()
     messages = messages or default_messages()
     skip = exempt_matcher(default_exempt() if exempt is None else exempt)
     # Registered families in report order: findings list in this order
@@ -93,15 +92,14 @@ def scan_trace(
     # No capture markers and no device data: generated, so no merge applies
     result.synthetic = index.synthetic
     # A fatal hit (MET009, MET010) stops the scan before grading
-    hits = integrity.finish(index)
+    hits = resolve_severity(integrity.finish(index), rules)
     fatal = [h for h in hits if h.severity == FATAL]
     if fatal:
         result.problems += [render(messages, h.rule, **h.values) for h in fatal]
         result.fatal_rule = fatal[0].rule
         return result
     # Metadata and integrity ran first; the rest follow in report order
-    hits += [hit for family in families if family is not integrity for hit in family.finish(index)]
-    shipped = shipped_rules()
+    hits += resolve_severity([h for f in families if f is not integrity for h in f.finish(index)], rules)
     for hit in hits:
         message = render(messages, hit.rule, **hit.values)
         if hit.severity != PASSED:
@@ -109,40 +107,25 @@ def scan_trace(
         if hit.severity in (INFO, PASSED):
             # Info and pass lower no consumer impact; they only inform
             result.notes.append(Issue(hit.rule, message, hit.ids))
-        elif shipped[hit.rule].is_gap():
-            result.gaps.append(Gap.from_hit(hit, message))
+        elif rules[hit.rule].is_gap():
+            result.gaps.append(Gap.from_hit(hit, message, rules))
     return result
 
 
+def resolve_severity(hits: list[Hit], rules: dict[str, Rule]) -> list[Hit]:
+    """Set each hit's severity from the effective rules, overrides included."""
+    return [replace(hit, severity=rules[hit.rule].severity) for hit in hits]
+
+
 def rule_exempt(rules: dict[str, Rule]) -> list[str]:
-    """Return the CPU annotation patterns of `OPS001`; shipped if absent."""
-    if "OPS001" not in rules:
-        rules = load_rules(DEFAULT_RULES)
+    """Return the CPU annotation patterns of `OPS001`."""
     return rules["OPS001"].exempt
 
 
 @cache
 def default_exempt() -> list[str]:
-    """Return the annotation patterns of the shipped rule file, loaded once."""
-    return rule_exempt(load_rules(DEFAULT_RULES))
-
-
-def expand_selectors(rules: dict[str, Rule], selectors: list[str]) -> list[str]:
-    """Resolve codes, names and code prefixes (such as DAG) to rule IDs."""
-    by_name = {r.name: r.id for r in rules.values()}
-    resolved, unknown = [], []
-    for selector in selectors:
-        if selector in rules:
-            resolved.append(selector)
-        elif selector in by_name:
-            resolved.append(by_name[selector])
-        elif matches := [r for r in rules if r.rstrip("0123456789") == selector]:
-            resolved.extend(matches)
-        else:
-            unknown.append(selector)
-    if unknown:
-        raise RuleConfigError(f"unknown rule ID: {', '.join(sorted(unknown))}")
-    return resolved
+    """Return the annotation patterns of the shipped rules."""
+    return rule_exempt(shipped_rules())
 
 
 def disabled_rules(
@@ -150,13 +133,13 @@ def disabled_rules(
     enable: list[str] | None = None,
     disable: list[str] | None = None,
 ) -> frozenset[str]:
-    """Return rule IDs to skip: file settings, then command-line overrides."""
+    """Return rule IDs to skip: rule defaults, then command-line overrides."""
     enable = expand_selectors(rules, enable or [])
     disable = expand_selectors(rules, disable or [])
     both = sorted(set(enable) & set(disable))
     if both:
         raise RuleConfigError(f"rule both enabled and disabled: {', '.join(both)}")
-    fatal = [r for r in disable if r in FATAL_RULES]
+    fatal = [r for r in disable if rules[r].required]
     if fatal:
         raise RuleConfigError(f"rule cannot be disabled: {', '.join(fatal)}")
     off = {r.id for r in rules.values() if not r.enabled}
@@ -212,11 +195,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="format of the --cli-output file (default: %(default)s)",
     )
     parser.add_argument(
-        "--rules",
+        "--set",
+        action="append",
+        default=[],
+        dest="settings",
+        metavar="ID.FIELD=VALUE",
+        help="override a rule field, for example STO007.severity=info; the ID may be a "
+        "name or prefix; fields: enabled, severity, message, exempt, consumer_impact.<consumer>; repeatable",
+    )
+    parser.add_argument(
+        "--set-file",
         type=Path,
-        default=DEFAULT_RULES,
         metavar="FILE",
-        help="rule configuration file (default: %(default)s)",
+        help="read ID.FIELD=VALUE settings from FILE, one per line; # starts a comment; --set wins",
     )
     parser.add_argument(
         "--enable-rule",
@@ -235,7 +226,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--list-rules",
         action="store_true",
-        help="list every rule with its enabled state, then exit",
+        help="list every rule with its effective settings, then exit",
     )
     return parser
 
@@ -247,6 +238,7 @@ def lint_traces(
     exempt: list[str],
     color: bool,
     show_cli: bool,
+    rules: dict[str, Rule] | None = None,
 ) -> list[tuple[Path, TraceResult]]:
     """Lint each trace in order; print its rows as soon as it is graded."""
     # A full scan takes minutes; show progress on a terminal only
@@ -266,7 +258,7 @@ def lint_traces(
 
         show_progress(label)
         try:
-            result = lint_trace(trace, disabled, messages, exempt, on_progress)
+            result = lint_trace(trace, disabled, messages, exempt, on_progress, rules)
         except RuleConfigError:
             show_progress("")
             raise
@@ -286,7 +278,8 @@ def main(argv: list[str] | None = None) -> int:
 
     # Fail before any scan when the rule file or overrides are unusable
     try:
-        rules = load_rules(args.rules)
+        settings = [*(read_settings(args.set_file) if args.set_file else []), *args.settings]
+        rules = apply_overrides(shipped_rules(), settings)
         messages = rule_messages(rules)
         exempt = rule_exempt(rules)
         disabled = disabled_rules(rules, args.enable_rule, args.disable_rule)
@@ -302,7 +295,7 @@ def main(argv: list[str] | None = None) -> int:
     color = args.cli_color == "always" or (args.cli_color == "auto" and sys.stdout.isatty())
     traces = collect_traces(args.paths, args.recursive)
     try:
-        results = lint_traces(traces, disabled, messages, exempt, color, show_cli)
+        results = lint_traces(traces, disabled, messages, exempt, color, show_cli, rules)
     except RuleConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

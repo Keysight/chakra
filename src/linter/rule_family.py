@@ -4,24 +4,26 @@ Base class and registry for rule families fed by one pass over a trace.
 Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
 """
 
-import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, TypeVar
 
 from chakra.schema.protobuf.et_def_pb2 import Node
 
-from .rule_config import RuleConfigError, shipped_rules
+from .rule_config import (  # noqa: F401  (severity names are re-exported)
+    ERROR,
+    FATAL,
+    INFO,
+    PASSED,
+    READY,
+    WARNING,
+    Rule,
+    RuleConfigError,
+    check_rule,
+)
 
 if TYPE_CHECKING:
     from .index_builder import TraceIndex
-
-# Rule ID: two or three capital letters and three digits, such as DAG001
-RULE_ID = re.compile(r"[A-Z]{2,3}[0-9]{3}")
-
-# Severity of a hit: fatal stops the scan; error, warning and info show the
-# message; pass shows nothing but still counts toward suitability
-FATAL, ERROR, WARNING, INFO, PASSED = "fatal", "error", "warning", "info", "pass"
 
 # Check method: reads the shared index, returns the defects it found
 Check = Callable[..., "list[Hit]"]
@@ -35,15 +37,45 @@ class Hit:
     ids: list[int] = field(default_factory=list)  # sample node IDs
     values: Mapping[str, object] = field(default_factory=dict)  # placeholders
     node_type: int | None = None  # node type the finding concerns, if any
-    # Filled from the rule's severity in rules.toml; checks leave it empty
+    # Filled from the rule's severity; checks leave it empty
     severity: str = ""
 
 
-def rule(rule_id: str) -> Callable[[Check], Check]:
-    """Mark a family method as the check of one rule in `rules.toml`."""
+def rule(
+    rule_id: str,
+    *,
+    name: str,
+    severity: str,
+    message: str,
+    description: str,
+    replay: str = READY,
+    simulator: str = READY,
+    analysis: str = READY,
+    enabled: bool = True,
+    required: bool = False,
+    exempt: Iterable[str] = (),
+) -> Callable[[Check], Check]:
+    """
+    Mark a family method as the check of one rule and declare the rule.
+
+    The arguments are the rule's shipped defaults; a user overrides them with
+    `--set`. A consumer impact left out is READY, which means no effect.
+    """
+    spec = Rule(
+        id=rule_id,
+        name=name,
+        description=description,
+        enabled=enabled,
+        severity=severity,
+        message=message,
+        consumer_impact={"replay": replay, "simulator": simulator, "analysis": analysis},
+        exempt=list(exempt),
+        required=required,
+    )
 
     def mark(method: Check) -> Check:
         method.rule_id = rule_id  # type: ignore[attr-defined]
+        method.rule_spec = spec  # type: ignore[attr-defined]
         return method
 
     return mark
@@ -53,14 +85,17 @@ class RuleFamily:
     """
     Rules that share accumulators during the single pass over a trace.
 
-    Rule text, names and enabled state come from `rules.toml`. Methods marked
-    with `@rule` are the checks; `finish` dispatches enabled rules by ID. The
+    Methods marked with `@rule` are the checks, and the decorator carries the
+    rule's name, text, severity and consumer impact; `finish` dispatches enabled rules by ID. The
     builder calls `add` once per node, then `finish` once. A family keeps its
     own counters and never retains `node`.
     """
 
     # Rule ID to check method name, in report order; built per subclass
     checks: dict[str, str] = {}
+
+    # Rule ID to the rule declared by its `@rule`; built per subclass
+    rules: dict[str, Rule] = {}
 
     # Report position among families; lower runs first, integrity first
     order: int = 100
@@ -74,25 +109,24 @@ class RuleFamily:
     def __init_subclass__(cls, **kwargs: object) -> None:
         """Collect `@rule` methods and validate their IDs."""
         super().__init_subclass__(**kwargs)
-        cls.checks = {}
+        cls.checks, cls.rules = {}, {}
         for name, method in vars(cls).items():
-            rule_id = getattr(method, "rule_id", None)
-            if rule_id is None:
+            spec = getattr(method, "rule_spec", None)
+            if spec is None:
                 continue
-            if not RULE_ID.fullmatch(rule_id):
-                raise TypeError(f"{cls.__name__}: bad rule ID {rule_id!r}")
-            if rule_id in cls.checks:
-                raise TypeError(f"{cls.__name__} repeats rule ID {rule_id}")
-            cls.checks[rule_id] = name
+            if spec.id in cls.checks:
+                raise TypeError(f"{cls.__name__} repeats rule ID {spec.id}")
+            try:
+                check_rule(spec)
+            except RuleConfigError as exc:
+                raise TypeError(f"{cls.__name__}: {exc}") from exc
+            cls.checks[spec.id] = name
+            cls.rules[spec.id] = spec
         if not cls.checks:
             raise TypeError(f"{cls.__name__} declares no rules")
 
     def __init__(self, disabled: Iterable[str] = ()) -> None:
-        """Bind the rules to `rules.toml`; `disabled` IDs are skipped."""
-        known = shipped_rules()
-        missing = sorted(set(self.checks) - set(known))
-        if missing:
-            raise RuleConfigError(f"{type(self).__name__}: rules missing from rules.toml: {', '.join(missing)}")
+        """Bind the family's rules; `disabled` IDs are skipped."""
         self.enabled = frozenset(self.checks) - frozenset(disabled)
 
     @classmethod
@@ -110,12 +144,11 @@ class RuleFamily:
 
     def finish(self, index: "TraceIndex") -> list[Hit]:
         """Run each enabled rule's check over the shared index."""
-        known = shipped_rules()
         hits: list[Hit] = []
         for rule_id, name in self.checks.items():
             if rule_id in self.enabled:
                 for hit in getattr(self, name)(index):
-                    hits.append(replace(hit, severity=hit.severity or known[hit.rule].severity))
+                    hits.append(replace(hit, severity=hit.severity or self.rules[hit.rule].severity))
         return hits
 
 
@@ -130,6 +163,10 @@ def register(cls: type[FamilyT]) -> type[FamilyT]:
     clash = sorted(taken & set(cls.checks))
     if clash:
         raise TypeError(f"{cls.__name__} reuses rule IDs {', '.join(clash)}")
+    names = {r.name for family in FAMILIES for r in family.rules.values()}
+    reused = sorted(names & {r.name for r in cls.rules.values()})
+    if reused:
+        raise TypeError(f"{cls.__name__} reuses rule names {', '.join(reused)}")
     FAMILIES.append(cls)
     return cls
 

@@ -8,23 +8,23 @@ from contextvars import ContextVar
 from functools import cache
 from importlib.metadata import PackageNotFoundError, version
 
+from .catalog import shipped_rules
 from .index_builder import DEFAULT_STREAM
-from .rule_config import DEFAULT_RULES, Rule, RuleConfigError, load_rules, master_placeholders
+from .rule_config import Rule, RuleConfigError, master_placeholders
 
-# Message template per rule ID, as loaded from the rule file
+# Message template per rule ID
 Messages = dict[str, str]
 
 
 def rule_messages(rules: dict[str, Rule]) -> Messages:
-    """Return the template per rule; the shipped file fills omitted rules."""
-    shipped = load_rules(DEFAULT_RULES)
-    return {rule_id: rule.message for rule_id, rule in {**shipped, **rules}.items()}
+    """Return the template per rule."""
+    return {rule_id: rule.message for rule_id, rule in rules.items()}
 
 
 @cache
 def default_messages() -> Messages:
-    """Return the templates of the shipped rule file, loaded once."""
-    return rule_messages(load_rules(DEFAULT_RULES))
+    """Return the templates of the shipped rules, built once."""
+    return rule_messages(shipped_rules())
 
 
 class Message(str):

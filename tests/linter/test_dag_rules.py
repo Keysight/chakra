@@ -62,9 +62,21 @@ def test_builder_feeds_each_node_once(tmp_path) -> None:
     assert (family.self_refs, family.dup_edges) == (2, 1)
 
 
+def probe_rule(rule_id: str, **overrides: str) -> object:
+    """Declare a valid probe rule; `overrides` replace its fields."""
+    fields = {
+        "name": f"probe-{rule_id.lower()}",
+        "severity": "warning",
+        "message": "probe",
+        "description": "Probe rule.",
+        **overrides,
+    }
+    return rule_family.rule(rule_id, **fields)(lambda self, index: [])
+
+
 def family(*ids: str) -> type:
     """Build a family class whose checks carry the given rule IDs."""
-    body = {f"check_{i}": rule_family.rule(i)(lambda self, index: []) for i in ids}
+    body = {f"check_{i}": probe_rule(i) for i in ids}
     return type("Probe", (rule_family.RuleFamily,), body)
 
 
@@ -79,9 +91,25 @@ def test_registry_rejects_reused_rule_ids() -> None:
         rule_family.register(family("DAG001"))
 
 
-def test_family_rules_must_exist_in_the_rule_file() -> None:
-    with pytest.raises(linter.RuleConfigError, match="ZZZ999"):
-        family("ZZZ999")()
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"name": "Not Kebab"},
+        {"severity": "loud"},
+        {"description": "no final period"},
+        {"message": "uses {bogus}"},
+        {"replay": "GREAT"},
+    ],
+)
+def test_family_rules_must_meet_the_catalog_conventions(bad) -> None:
+    with pytest.raises(TypeError):
+        type("Probe", (rule_family.RuleFamily,), {"check": probe_rule("ZZZ999", **bad)})
+
+
+def test_registry_rejects_reused_rule_names() -> None:
+    reuse = type("Probe", (rule_family.RuleFamily,), {"check": probe_rule("ZZZ999", name="dag-cycle")})
+    with pytest.raises(TypeError, match="names"):
+        rule_family.register(reuse)
 
 
 def test_checks_follow_declaration_order() -> None:

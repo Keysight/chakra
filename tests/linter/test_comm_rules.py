@@ -27,7 +27,7 @@ def variants(node_type: int) -> list[dict]:
 
 
 def spec(nodes: list[tuple[int, dict]]) -> dict[tuple[str, int], int]:  # noqa: C901
-    """State the counts the rules.toml descriptions require."""
+    """State the counts the rule descriptions require."""
     found: dict[tuple[str, int], int] = {}
 
     def count(rule: str, node_type: int) -> None:

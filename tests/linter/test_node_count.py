@@ -4,7 +4,9 @@ from pathlib import Path
 
 import pytest
 from chakra.src.linter import index_builder, linter
+from chakra.src.linter.catalog import shipped_rules
 from chakra.src.linter.messages import chakra_version, default_messages, render, rule_messages
+from chakra.src.linter.rule_config import apply_overrides
 from families import node, write_trace
 
 
@@ -64,10 +66,7 @@ def test_count_and_empty_trace_are_separate_rules(tmp_path) -> None:
     assert any("MET010  error    trace holds a metadata header node but no other nodes" in r for r in rows)
 
 
-def test_count_wording_comes_from_the_rules_file(tmp_path) -> None:
-    original = "read and decoded {count} nodes using schema version {version}"
-    custom = linter.DEFAULT_RULES.read_text().replace(original, "{count} read")
-    path = tmp_path / "rules.toml"
-    path.write_text(custom)
-    messages = rule_messages(linter.load_rules(path))
+def test_count_wording_comes_from_the_rule_settings() -> None:
+    rules = apply_overrides(shipped_rules(), ["MET012.message={count} read"])
+    messages = rule_messages(rules)
     assert render(messages, "MET012", count=1234) == "1,234 read"

@@ -25,8 +25,9 @@
 
 ## Position in the Toolchain
 
-- The linter runs last, on the converted `.et` files, before any consumer reads them.
-- Pipeline: trace, link, convert, lint.
+- The linter reads `.et` files only. It runs standalone and needs no other Chakra tool.
+- Standalone use: lint any `.et` file or directory, whatever produced it (converter, generator, or another tool).
+- Pipeline use: it runs last, after conversion and before any consumer reads the traces.
 
 | Stage   | Tool                | Input                          | Output                    |
 |---------|---------------------|--------------------------------|---------------------------|
@@ -35,7 +36,13 @@
 | Convert | `chakra_converter`  | Merged host-device JSON        | Chakra `.et` files        |
 | Lint    | `chakra_linter`     | `.et` files or directories     | Usability report          |
 
-Example:
+Standalone example:
+
+```bash
+chakra_linter traces/ --report-output report.md
+```
+
+Pipeline example:
 
 ```bash
 # 1. Trace: capture host and device traces per rank (PyTorch profilers)
@@ -54,39 +61,16 @@ chakra_converter PyTorch --input linked_0.json --output traces/chakra.0.et
 chakra_linter traces/ --report-output report.md
 ```
 
-- Run the lint stage after every conversion to detect defects at the stage that introduced them.
+- In a pipeline, run the lint stage after every conversion to detect defects at the stage that introduced them.
 - Use the report as a gate before replay, simulation, or analysis starts.
 - Share the report with the trace so consumers see the supported uses.
-
-## Coverage of Upstream Checks
-
-- `rules.toml` is the source of truth. Consumers need not run the link or convert stage to learn what a trace lacks.
-- Every upstream check that leaves evidence in a finished `.et` file has a rule.
-- A check that aborts the tool leaves no `.et` file, so no rule applies.
-
-| Upstream check | Stage | Linter rule |
-|----------------|-------|-------------|
-| Duplicate node ID | Convert (`pytorch_converter.py`) | `DAG001` |
-| Dependency cycle | Convert (`pytorch_converter.py`) | `DAG005` |
-| Unsupported schema version | Convert (`pytorch_node.py`) | `MET008` |
-| Unrecognized collective type | Convert (`pytorch_converter.py`) | `COM002`, `COM008` |
-| GPU operator without host parent (no runtime operator, no parent, no `external_id`) | Link (`trace_linker.py`) | `KIN003`, `KIN005` |
-| Duplicate Kineto correlation ID | Link (`chakra_device_trace_loader.py`) | None: the tool aborts |
-| Kineto arrow event without `id` | Link (`chakra_device_trace_loader.py`) | None: the tool aborts |
-| Negative exclusive duration | Link (`chakra_device_trace_loader.py`) | None: the tool aborts |
-| Unsupported tensor data type | Convert (`pytorch_node.py`) | None: the tool aborts |
-| Host operator without Kineto match | Link (`trace_linker.py`) | None: no trace evidence |
-| Synchronization dependency without external IDs | Link (`trace_linker.py`) | None: no trace evidence |
-| Missing `et_replay` package | Link (`trace_link.py`) | None: environment check |
-
-- Add a row when a stage gains a check. Add a rule when the check leaves evidence in the `.et` file.
 
 ## Methodology
 
 - Usability is a degree, not a yes or no answer. Every trace receives one usability value per consumer.
 - Each rule sets a value for each consumer it affects; the worst value wins.
 - Rules for decode failure, empty traces, schema violations, and DAG validity set `NOT SUITABLE` for every consumer.
-- Consumers:
+- Consumers (full definitions live in [`CONSUMER_INFO` in consumer.py](consumer.py); the report prints the same text):
   - **Replay:** re-executes operators; requires collective and point-to-point attributes, and replay units: the outermost CPU nodes (`is_cpu_op` true) that carry a non-empty `op_schema`, with I/O that fits it. Replay runs a unit with its whole subtree, so descendants are not graded. GPU kernels need no schema; replay runs the CPU operator that launches them. Durations may be zero, because replay runs the operator rather than modeling its time.
   - **Simulator:** models timing from the graph; requires communication attributes and a duration or I/O for each compute node.
   - **Analysis:** reads timing and structure; requires nonzero durations and a device link.
@@ -97,7 +81,7 @@ chakra_linter traces/ --report-output report.md
 ## Architecture
 
 - One pass over the `.et` file feeds every rule family; no rule re-reads the file.
-- Rule text and enabled state live in `rules.toml`; check logic lives in `*_rules.py`.
+- Each rule's text, severity and consumer impact sit in the `@rule` decorator of its check in `*_rules.py`.
 - Each module has one job:
 
 | Module | Job |
@@ -105,10 +89,11 @@ chakra_linter traces/ --report-output report.md
 | `linter.py` | Orchestrates the run: builds the families, collects hits, handles the CLI. |
 | `*_rules.py` | One rule family each; fills accumulators and returns hits. |
 | `index_builder.py` | Makes the single pass and holds the shared `TraceIndex`. |
-| `consumer.py` | Grades gaps per consumer: evidence groups, gap levels, `TraceResult`; reads gap policy from `rules.toml`. |
-| `messages.py` | Fills message templates from `rules.toml`. |
+| `consumer.py` | Grades gaps per consumer: evidence groups, gap levels, `TraceResult`; reads gap policy from the rule catalog. |
+| `messages.py` | Fills message templates from the rule catalog. |
 | `reports.py` | Renders markdown, HTML, stylish CLI, JSON, and SARIF output. |
-| `rule_config.py` | Loads and validates `rules.toml` against the schema. |
+| `rule_config.py` | Defines `Rule`, validates it, and applies `--set` overrides. |
+| `catalog.py` | Imports every family and lists the shipped rules in report order. |
 
 - A hit carries a severity: `fatal` stops the scan; `error`, `warning`, and `info` show the message; `pass` shows nothing. For suitability, `info` counts as `pass`: it lowers no consumer impact.
 - Orange blocks in the diagram mark the steps where a developer extends the rules.
@@ -122,20 +107,20 @@ chakra_linter traces/ --report-output report.md
 sequenceDiagram
     autonumber
     participant CLI as linter.py<br/>main, scan_trace
-    participant CFG as rule_config.py<br/>rules.toml + schema
+    participant CFG as rule_config.py, catalog.py<br/>Rule, overrides, shipped rules
     participant FAM as *_rules.py<br/>RuleFamily subclasses
     participant IDX as index_builder.py<br/>IndexBuilder, TraceIndex
     participant POL as consumer.py, messages.py<br/>gap policy, render
 
-    CLI->>CFG: load_rules()
-    CFG-->>CLI: rules, message templates
+    CLI->>CFG: shipped_rules(), apply_overrides()
+    CFG-->>CLI: effective rules, message templates
 
     rect rgb(255, 224, 178)
-    Note over CFG: EXTEND 1: add a [[rule]] entry in rules.toml<br/>and any new placeholder in rules.schema.json
+    Note over CFG: EXTEND 1: declare the rule in its @rule decorator<br/>and any new placeholder in PLACEHOLDERS
     end
 
     CLI->>FAM: build_families() in order, one per registered family
-    FAM->>CFG: shipped_rules() checks every @rule ID exists
+    FAM->>CFG: import time: check_rule() validates each @rule
 
     rect rgb(255, 224, 178)
     Note over FAM: EXTEND 2: add an @rule("ID") method to a family,<br/>or a new @register RuleFamily subclass<br/>with a unique order, and scan_trace picks it up
@@ -165,7 +150,7 @@ sequenceDiagram
     POL->>CFG: message template by rule ID
 
     rect rgb(255, 224, 178)
-    Note over POL: EXTEND 4: add a consumer_impact line to the rule<br/>entry in rules.toml, and in the same file
+    Note over POL: EXTEND 4: set replay, simulator and analysis<br/>impact in the same @rule decorator
     end
 
     POL-->>CLI: Gap, Issue
@@ -176,131 +161,121 @@ sequenceDiagram
 
 | Change                | Files to touch                                                                             |
 |-----------------------|--------------------------------------------------------------------------------------------|
-| Reword or toggle rule | `rules.toml`                                                                               |
-| New placeholder       | `x-placeholders` in `rules.schema.json`, before use in a message                           |
-| New rule, existing family | `rules.toml` entry with a `consumer_impact` line, `@rule("ID")` method in `*_rules.py` |
-| New family            | New `*_rules.py` with `@register` subclass, instance and `finish` call in `scan_trace`     |
+| Reword or re-grade rule | Its `@rule(...)` arguments in `*_rules.py`                                               |
+| New placeholder       | `PLACEHOLDERS` in `rule_config.py`, before use in a message                                |
+| New rule, existing family | `@rule("ID", ...)` method in `*_rules.py` with name, severity, message, description and impact |
+| New family            | New `*_rules.py` with `@register` subclass; import it and add its ID prefix in `catalog.py` |
 | New shared fact       | Field on `TraceIndex`, filled in `IndexBuilder`; never a per-family node copy              |
 
 - `add` runs once per node; keep only counters, samples, and scalars.
 - `finish` runs once after the pass; resolve cross-node checks there.
 - A family never retains `node`.
 
-## Rule Configuration (`rules.toml`)
+## Rule Configuration
 
-- `rules.toml` declares every check the linter runs: ID, name, description, enabled state, and report message.
-- `rules.schema.json` defines the syntax of that file.
-- The `*_rules.py` families implement the check logic that each rule ID selects.
-- The three files form one contract. No file is complete without the other two.
+- Every rule is declared once, in the `@rule` decorator of the check that implements it.
+- `catalog.py` imports every family and lists the shipped rules in report order.
+- A user changes a rule for one run with `--set`; no rule file exists.
 
-### Schema
+### The `@rule` Decorator
 
-- One `[[rule]]` table per check. The file requires at least one rule.
-- Unknown keys are rejected.
-
-| Key           | Type            | Required | Constraint                                                          |
-|---------------|-----------------|----------|---------------------------------------------------------------------|
-| `id`          | string          | Yes      | Two or three capital letters plus three digits, such as `DAG005`.   |
-| `name`        | string          | Yes      | Kebab-case label, such as `dag-cycle`.                              |
-| `description` | string          | Yes      | What the rule checks and why it matters. Ends with a period.        |
-| `enabled`     | boolean         | Yes      | `true` runs the rule; `false` drops its findings before grading.    |
-| `severity`    | string          | Yes      | `fatal`, `error`, `warning`, `info`, or `pass`. One fixed value; a case that differs is a separate rule. |
-| `message`     | string          | Yes      | Report text. `{placeholders}` name values that the check supplies.  |
-| `consumer`    | inline table    | Yes      | `{ replay = x, simulator = y, analysis = z }`; each value is `READY` (no known gap), `LIMITED` (known gap lowers fidelity), `REVIEW` (linter cannot decide; manual inspection) or `NOT SUITABLE` (consumer cannot use the trace). Applies when a finding reports at `warning` or above; `info` and `pass` rules use `READY`. |
-| `exempt`      | array of string | No       | Shell-style name patterns exempt from the check. `OPS001` only.     |
-
-Example:
-
-```toml
-[[rule]]
-id = "DAG003"
-name = "dag-self-dep"
-description = "A node lists its own ID as a dependency. The node can never become ready, so replay and simulation stall."
-enabled = true
-severity = "error"
-message = "self-dependency"
+```python
+@rule(
+    ABC001,
+    name="abc-example",
+    severity=ERROR,
+    message="{count} nodes have the defect",
+    description="What the rule checks and why it matters.",
+    replay=NOT_SUITABLE,
+    analysis=REVIEW,
+)
+def example(self, index: TraceIndex) -> list[Hit]: ...
 ```
 
-- The ID prefix groups rules by area: `MET` (metadata and integrity), `DAG`, `KIN` (device link and timing), `COM`, `STO`, `OPS` (operators and operator I/O), `ATT`.
+| Argument      | Required | Constraint                                                          |
+|---------------|----------|---------------------------------------------------------------------|
+| ID (positional) | Yes    | Two or three capital letters plus three digits, such as `ABC001`.   |
+| `name`        | Yes      | Kebab-case label, unique across rules.                              |
+| `severity`    | Yes      | `fatal`, `error`, `warning`, `info`, or `pass`. One fixed value; a case that differs is a separate rule. |
+| `message`     | Yes      | Report text. `{placeholders}` must appear in `PLACEHOLDERS`.        |
+| `description` | Yes      | What the rule checks and why it matters. Ends with a period.        |
+| `replay`, `simulator`, `analysis` | No | `READY` (default, no effect), `LIMITED` (known gap lowers fidelity), `REVIEW` (linter cannot decide) or `NOT_SUITABLE` (consumer cannot use the trace). Applies when a finding reports at `warning` or above. |
+| `enabled`     | No       | Default `True`; `False` drops the rule's findings before grading.   |
+| `required`    | No       | `True` for rules that cannot be disabled or re-graded. |
+| `exempt`      | No       | Shell-style name patterns exempt from the check.                    |
+
+- The ID prefix groups rules by area. `chakra_linter --list-rules` shows every rule.
 - IDs stay stable and are never reused for a different rule.
-- Placeholders are limited per rule. The loader rejects a message that names a value its check does not supply.
+- A class constant such as `ABC001 = "ABC001"` names the ID once for the decorator and for `Hit`.
 
 ### Source of Truth
 
-- `rules.toml` owns the rule catalog: which rules exist, their wording, and their default state.
-- Rule family modules (`*_rules.py`) own detection: each family class fills accumulators during the single pass over the trace, and its `@rule("ID")` methods turn them into findings.
-- `rules.toml` also holds one suitability entry per consumer (`SUI001` to `SUI003`): its ID, name and text.
-- Each rule sets its consumer impact on its own `consumer_impact` line, for example `consumer_impact = { replay = "REVIEW", analysis = "REVIEW" }`. The line applies when a finding of the rule reports at `fatal`, `error` or `warning`.
-- `rules.toml` holds the one severity and the one `consumer_impact` of each rule. A check never overrides either. A case that differs is a separate rule, such as `OPS001` (some operators lack `op_schema`) and `OPS005` (all lack it).
-- A rule requires both halves. A TOML entry without a check never fires; a check without an entry fails at startup.
-- `x-placeholders` in `rules.schema.json` is the master list of placeholder names, each with a description.
-- Any rule may use any master name; a check that does not supply a name it is given fails at render.
-- The loader falls back to the shipped file for any rule that a custom file omits.
+- Rule family modules (`*_rules.py`) own detection and the rule declarations. Each family class fills accumulators during the single pass over the trace, and its `@rule` methods turn them into findings.
+- `PLACEHOLDERS` in `rule_config.py` is the master list of placeholder names, each with a description.
+- `CONSUMER_INFO` in `consumer.py` holds one suitability entry per consumer: its ID, name and text.
+- Each rule has one severity and one impact per consumer. A check never overrides either. A case that differs is a separate rule.
+- `scan_trace` resolves each hit's severity from the effective rules, so `--set` severity changes reach grading.
 
 | Concern                   | Defined in                      |
 |---------------------------|---------------------------------|
-| Rule ID, name, wording    | `rules.toml`                    |
-| Enabled by default        | `rules.toml`                    |
-| Exempt annotation names   | `rules.toml` (`OPS001`)         |
-| File syntax               | `rules.schema.json`             |
+| Rule ID, name, wording    | `@rule` in `*_rules.py`         |
+| Severity and consumer impact | `@rule` in `*_rules.py`      |
+| Enabled by default        | `@rule(enabled=...)`            |
+| Exempt annotation names   | `exempt=` on the rule that uses them |
 | Detection logic           | `*_rules.py` (one family per category) |
-| Placeholder names, meaning | `rules.schema.json` (`x-placeholders`) |
-| Consumer impact per gap   | `rules.toml` (`consumer_impact` on each `[[rule]]`) |
+| Placeholder names, meaning | `PLACEHOLDERS` in `rule_config.py` |
+| Report order of families  | `GROUP_ORDER` in `catalog.py`   |
 
 ### Traceability
 
 One rule ID links a Hit to its outputs.
 
-- `rule ID`: joins the Hit to its `[[rule]]` entry in `rules.toml`.
-- `consumer_impact`: joins the rule to the verdict, one value per consumer.
+- `rule ID`: joins the Hit to its `@rule` declaration.
+- Consumer impact: joins the rule to the verdict, one value per consumer.
 - Values, best to worst: `READY`, `LIMITED`, `REVIEW`, `NOT SUITABLE`.
 - `info` and `pass` Hits lower no consumer. `fatal` stops the scan.
 - `TraceResult.status` takes the worst value per consumer across all findings.
 - The CLI and the report show the same rows: findings, then one suitability row per consumer.
 
-#### Worked Example: `KIN007`
-
-- **Hit**: `timing-absent` returns severity `warning`.
-- **Verdict**: replay `READY`, simulator `REVIEW`, analysis `NOT SUITABLE`.
-
 ### Validation
 
-- The loader fails fast, before any trace scan, on a missing, malformed, or invalid rule file.
-- Checks at load time:
-  - TOML syntax.
-  - Conformance to `rules.schema.json`.
-  - Unique rule IDs and names.
-  - Valid message placeholders.
-  - `MET009` and `MET010` stay enabled, because an unreadable or empty trace cannot be graded.
-- `tests/linter/test_rules_toml.py` enforces the criteria that the schema cannot express:
+- Import time: each `@rule` is validated when its family class is created. A bad ID, name, severity, impact value, description or message placeholder raises `TypeError`, and the linter does not start.
+- Registration: `@register` rejects a reused rule ID or name.
+- Catalog: `catalog.py` rejects an ID prefix that `GROUP_ORDER` omits.
+- Command line: `--set` and `--set-file` entries are validated before any trace scan.
+- `tests/linter/test_rule_catalog.py` enforces the criteria that the decorator cannot express:
   - IDs and names are unique.
   - Prefix groups are contiguous and numbered from 001.
   - Placeholders match what each check supplies.
   - `exempt` belongs to one rule only.
-  - A committed ID keeps its name, or retires.
-- `tests/linter/test_rule_inventory.py` confirms that the rule file and the code agree.
+  - Required rules are exactly the fatal ones.
+- `tests/linter/test_rule_inventory.py` confirms that the catalog and the CLI agree.
+- `tests/linter/test_rule_overrides.py` covers the override syntax and its errors.
 
 ### Usage
 
-- `--rules FILE` loads a custom rule file in place of the shipped one.
-- `--list-rules` prints every rule with its enabled state, then exits.
-- `--enable-rule` and `--disable-rule` override the file for one run. Each accepts a rule ID, name, or prefix, such as `DAG`, and repeats.
-- Example: disable `KIN001` for a genuine CPU-only capture.
+- `--list-rules` prints every rule with its severity and enabled state, as overridden for the run, then exits. A trailing `(set: ...)` names each field that differs from the shipped default.
+- `--set SELECTOR.FIELD=VALUE` overrides one field for one run; it repeats.
+  - `SELECTOR` is a rule ID, name, or prefix, such as `DAG`.
+  - `FIELD` is `enabled`, `severity`, `message`, `exempt` (comma-separated patterns), or `consumer_impact.replay`, `consumer_impact.simulator`, `consumer_impact.analysis`.
+  - A required rule rejects `enabled` and `severity` changes.
+- `--set-file FILE` reads the same settings from a file, one per line. Blank lines and lines that start with `#` are skipped. `--set` entries apply after the file and win.
+- `--enable-rule` and `--disable-rule` remain as short forms of `enabled`. Each accepts a rule ID, name, or prefix, and repeats.
+- Example: disable one rule and downgrade another for a run.
 
 ```bash
-chakra_linter traces/ --disable-rule KIN001
+chakra_linter traces/ --disable-rule KIN001 --set STO007.severity=info
 ```
 
 ### Changing a Rule
 
-- Edit wording, default state, or `exempt` patterns in `rules.toml` alone. No code change applies.
-- Add a rule by adding a `[[rule]]` entry, a `@rule("ID")` method on its family in `*_rules.py`, and a `consumer_impact` line on the rule entry in `rules.toml`. Add any new placeholder to `x-placeholders` first.
-- Add a family by subclassing `RuleFamily`, decorating it with `@register`, and setting a unique `order`. `scan_trace` builds every registered family in `order`; no list to edit.
-- Import the new `*_rules.py` module in `linter.py` so the decorator runs. A test fails when a module registers no family.
+- Edit wording, severity, impact, or default state in the rule's `@rule(...)` call. The change and the check sit in one diff.
+- Add a rule by adding a `@rule("ID", ...)` method on its family in `*_rules.py`. Add any new placeholder to `PLACEHOLDERS` first.
+- Add a family by subclassing `RuleFamily`, decorating it with `@register`, and setting a unique `order`. `scan_trace` builds every registered family in `order`.
+- Import the new `*_rules.py` module in `catalog.py` and add its ID prefix to `GROUP_ORDER`. A test fails when a module registers no family.
 - Override `create` only when the family needs more than `disabled`, as `ReplayRules` does.
-- Set `severity` on the new `[[rule]]` entry. Override it on the hit only when the level varies with the data.
 - Retire a rule by leaving its ID unused. Do not reassign the ID.
-- Run the linter tests after every change to the file.
+- Run the linter tests after every change.
 
 ## Backlog
 

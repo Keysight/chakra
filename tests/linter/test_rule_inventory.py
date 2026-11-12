@@ -1,21 +1,21 @@
-"""BL-15: the shipped rule file matches the code and the CLI."""
+"""The shipped rule catalog matches the code and the CLI."""
 
 import ast
 from pathlib import Path
 
 import pytest
-from chakra.src.linter import linter, messages, reports, rule_config
+from chakra.src.linter import catalog, linter, messages, reports, rule_config
 
 ROOT = Path(__file__).resolve().parents[2] / "src" / "linter"
 
 
 @pytest.fixture(scope="module")
 def shipped_rules() -> dict[str, linter.Rule]:
-    return linter.load_rules(linter.DEFAULT_RULES)
+    return catalog.shipped_rules()
 
 
-def test_rule_file_matches_code(shipped_rules) -> None:
-    """Every rule ID that code names literally has a rule entry."""
+def test_rule_catalog_matches_code(shipped_rules) -> None:
+    """Every rule ID that code names literally is in the catalog."""
     tree = ast.parse(Path(linter.__file__).read_text())
     named = {
         arg.value
@@ -27,27 +27,24 @@ def test_rule_file_matches_code(shipped_rules) -> None:
     assert named <= set(shipped_rules)
 
 
-def test_every_rule_has_a_check(shipped_rules) -> None:
-    """Every rule ID in the file appears as a string constant in the code."""
-    literals = {
-        n.value
-        for source in [Path(linter.__file__), *ROOT.glob("*_rules.py")]
-        for n in ast.walk(ast.parse(source.read_text()))
-        if isinstance(n, ast.Constant) and isinstance(n.value, str)
-    }
-    missing = sorted(set(shipped_rules) - literals)
-    assert not missing, f"rules without a check: {missing}"
-
-
 def test_list_rules_shows_state(shipped_rules, capsys) -> None:
     argv = ["--list-rules", "--disable-rule", "DAG005"]
     assert linter.main(argv) == 0
     lines = capsys.readouterr().out.splitlines()
     assert len(lines) == len(shipped_rules) + 1
-    states = {ln.split()[0]: ln.split()[-1] for ln in lines[:-1]}
+    states = {ln.split()[0]: ln.split()[3] for ln in lines[:-1]}
     assert states["DAG005"] == "disabled"
     assert states["MET009"] == "enabled"
     assert lines[-1] == f"{len(shipped_rules)} rules, 1 disabled"
+
+
+def test_list_rules_shows_effective_settings_and_marks_overrides(capsys) -> None:
+    argv = ["--list-rules", "--set", "STO007.severity=info", "--set", "DAG005.enabled=false"]
+    assert linter.main(argv) == 0
+    lines = {ln.split()[0]: ln for ln in capsys.readouterr().out.splitlines()}
+    assert lines["STO007"].split()[2] == "info" and lines["STO007"].endswith("(set: severity)")
+    assert lines["DAG005"].split()[3] == "disabled" and lines["DAG005"].endswith("(set: enabled)")
+    assert "(set:" not in lines["STO006"]
 
 
 def test_paths_required_without_list_rules() -> None:
@@ -94,7 +91,7 @@ def test_unknown_placeholder_is_a_config_error() -> None:
 
 
 def test_every_rule_has_an_owner(shipped_rules) -> None:
-    """Each rule of the file belongs to one family."""
+    """Each rule of the catalog belongs to one family."""
     from chakra.src.linter import rule_family
 
     owned = {rule for family in rule_family.FAMILIES for rule in family.checks}

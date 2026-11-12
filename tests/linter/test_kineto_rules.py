@@ -36,7 +36,7 @@ def build(options: list) -> list:
 
 
 def spec(options: list, header: bool) -> dict[str, int | None]:
-    """State the findings the rules.toml descriptions require."""
+    """State the findings the rule descriptions require."""
     streamed = [o for o in options if o is not None]
     # No capture marker, no PyTorch attribute, no stream: a generated trace
     if not header and not streamed:
@@ -179,7 +179,7 @@ def run_timing(synthetic: bool, groups: dict[int, tuple[int, int]], disabled: fr
 
 
 def timing_spec(synthetic: bool, groups: dict[int, tuple[int, int]]) -> set[tuple[str, int | None]]:
-    """State the findings the rules.toml descriptions require."""
+    """State the findings the rule descriptions require."""
     total = sum(n for n, _ in groups.values())
     zero = sum(z for _, z in groups.values())
     if synthetic:

@@ -16,6 +16,7 @@ from functools import lru_cache
 from chakra.schema.protobuf.et_def_pb2 import COMP_NODE, Node
 
 from .index_builder import TraceIndex
+from .rule_config import ERROR, NOT_SUITABLE, PASSED, REVIEW, WARNING
 from .rule_family import Hit, RuleFamily, register, rule
 from .sampling import add_sample, keep_sample
 
@@ -181,11 +182,42 @@ def check_io(node: Node, op_schema: str) -> str:
     return ""
 
 
+# Name patterns of childless CPU annotations that need no op_schema
+EXEMPT_ANNOTATIONS = [
+    "record_param_comms",
+    "nccl:*",
+    "TorchDynamo*",
+    "Torch-Compiled Region*",
+    "Pregraph bytecode",
+    "AOTDispatcher*",
+    "CompiledFunction*",
+    "FullyShardedDataParallel*",
+    "autograd::*",
+    "torch::*",
+    "*Backward[0-9]",
+    "*Backward",
+    "triton_*",
+    "## *",
+    "[pytorch|*",
+    "enumerate(*",
+    "Optimizer.*",
+    "batch_id*",
+    "ProfilerStep*",
+    "detach",
+    "detach_",
+    "_[A-Z]*",
+    "*Function",
+    "FusedAttnFunc",
+    "MakeViewlessTensor",
+    "LinearWithGradAccumulationAndAsyncCommunication",
+]
+
+
 @register
 class ReplayRules(RuleFamily):
     """Operator schemas, recorded I/O, and idle compute nodes."""
 
-    # Rule IDs; each must match an entry in rules.toml
+    # Rule IDs; each names the `@rule` that declares it
     OPS001 = "OPS001"  # CPU operators without op_schema
     OPS002 = "OPS002"  # GPU kernels without op_schema
     OPS003 = "OPS003"  # no replayable CPU operators
@@ -282,7 +314,17 @@ class ReplayRules(RuleFamily):
         self.resolve(index)
         return super().finish(index)
 
-    @rule(OPS002)
+    @rule(
+        OPS002,
+        name="op-schema-kernel-note",
+        severity=PASSED,
+        message="GPU kernels named {family} have no op_schema; replay runs the CPU operator that launches them",
+        description=(
+            "Informational note that changes no impact. GPU compute nodes have no op_schema, listed per "
+            "kernel family derived from the kernel name. Replay runs the CPU operator that launches the "
+            "kernel, so a kernel needs no schema."
+        ),
+    )
     def kernel_schemas(self, index: TraceIndex) -> list[Hit]:
         """Note GPU kernels without op_schema, by family; replay needs none."""
         return [
@@ -297,14 +339,40 @@ class ReplayRules(RuleFamily):
             for family, n, first in self.op_families.entries()
         ]
 
-    @rule(OPS001)
+    @rule(
+        OPS001,
+        name="op-schema-missing",
+        severity=WARNING,
+        message="CPU operators named {family} have no op_schema; replay cannot call them",
+        description=(
+            "Some CPU operators have no op_schema (the PyTorch operator signature that replay calls), while "
+            "others do. A replay unit is the outermost CPU node with an op_schema, run with its whole "
+            "subtree. A node without an op_schema that has children acts as a wrapper, and replay moves to "
+            "its children. A childless node without an op_schema, outside any replay unit and not matching an "
+            "exempt pattern, has nothing to call. The report holds one finding per operator family, the name "
+            "group derived from the node name (namespace, else leading words), so new operators appear "
+            "without a rule change. OPS005 covers a trace where no operator has an op_schema."
+        ),
+        replay=REVIEW,
+        exempt=EXEMPT_ANNOTATIONS,
+    )
     def missing_schema(self, index: TraceIndex) -> list[Hit]:
         """Report CPU leaves without op_schema when others have one."""
         if not self.missing_ops or self.missing_ops == self.replayable:
             return []
         return self.schema_hits(self.OPS001)
 
-    @rule(OPS003)
+    @rule(
+        OPS003,
+        name="op-schema-no-cpu",
+        severity=ERROR,
+        message="no replayable CPU operators: {total} compute nodes, {schema} have op_schema",
+        description=(
+            "A captured trace has no replayable CPU operator: no CPU node with an op_schema, and no childless "
+            "node outside the exempt wrappers. Replay has nothing to run. OPS006 covers a synthetic trace."
+        ),
+        replay=NOT_SUITABLE,
+    )
     def no_cpu_ops(self, index: TraceIndex) -> list[Hit]:
         """Report a captured trace with no CPU operator to replay."""
         return [] if index.synthetic else self.no_cpu_hits(index, self.OPS003)
@@ -326,22 +394,63 @@ class ReplayRules(RuleFamily):
         values = {"count": self.io_hits[rule_id], "total": self.replayable}
         return [Hit(rule_id, self.io_ids.get(rule_id, []), values, COMP_NODE)]
 
-    @rule("OPS007")
+    @rule(
+        "OPS007",
+        name="io-malformed",
+        severity=ERROR,
+        message="CPU operators with malformed I/O fields",
+        description=(
+            "A replay unit carries input or output fields that do not parse, or whose values, shapes and "
+            "types lists differ in length. Replay cannot build the operator arguments."
+        ),
+        replay=NOT_SUITABLE,
+    )
     def malformed_io(self, index: TraceIndex) -> list[Hit]:
         """Report I/O fields that do not parse or disagree in length."""
         return self.io_hit("OPS007")
 
-    @rule("OPS008")
+    @rule(
+        "OPS008",
+        name="io-schema-arity",
+        severity=WARNING,
+        message="CPU operators with input count differing from op_schema",
+        description=(
+            "A replay unit (a CPU node that replay calls) records a number of inputs that differs from the "
+            "argument count of its op_schema. Replay may pass the wrong arguments, so a reviewer compares the "
+            "recorded inputs with the schema."
+        ),
+        replay=REVIEW,
+    )
     def arity_mismatch(self, index: TraceIndex) -> list[Hit]:
         """Report recorded inputs that do not fit the op_schema."""
         return self.io_hit("OPS008")
 
-    @rule("OPS009")
+    @rule(
+        "OPS009",
+        name="io-cpu-missing",
+        severity=WARNING,
+        message="CPU operators with op_schema but no I/O",
+        description=(
+            "A replay unit has an op_schema that expects arguments, but records no inputs and no outputs. "
+            "Replay has no tensors to pass, so a reviewer confirms whether the operator needs tensors."
+        ),
+        replay=REVIEW,
+    )
     def missing_io(self, index: TraceIndex) -> list[Hit]:
         """Report operators that need arguments but recorded none."""
         return self.io_hit("OPS009")
 
-    @rule(OPS004)
+    @rule(
+        OPS004,
+        name="compute-no-cost",
+        severity=ERROR,
+        message="missing I/O and duration",
+        description=(
+            "A compute node in a captured trace has no tensor input or output and zero duration. The "
+            "simulator has no cost to model for it."
+        ),
+        simulator=NOT_SUITABLE,
+    )
     def idle_compute(self, index: TraceIndex) -> list[Hit]:
         """Report compute nodes with no I/O and no duration; captured traces only."""
         # Modeled synthetic durations may be zero, so only captured traces count
@@ -349,14 +458,36 @@ class ReplayRules(RuleFamily):
             return [Hit(self.OPS004, self.idle_ids, {"count": self.idle}, COMP_NODE)]
         return []
 
-    @rule(OPS005)
+    @rule(
+        OPS005,
+        name="op-schema-none",
+        severity=ERROR,
+        message="CPU operators named {family} have no op_schema; no operator in the trace has one",
+        description=(
+            "No CPU node that replay would need to call has an op_schema (the PyTorch operator signature), so "
+            "replay cannot map any operator to a PyTorch call. OPS001 covers a trace where some operators "
+            "have one. The report holds one finding per operator family."
+        ),
+        replay=NOT_SUITABLE,
+    )
     def missing_schema_everywhere(self, index: TraceIndex) -> list[Hit]:
         """Report CPU leaves without op_schema when none has one."""
         if not self.missing_ops or self.missing_ops < self.replayable:
             return []
         return self.schema_hits(self.OPS005)
 
-    @rule(OPS006)
+    @rule(
+        OPS006,
+        name="op-schema-no-cpu-synthetic",
+        severity=WARNING,
+        message="no replayable CPU operators in a synthetic trace: {total} compute nodes, {schema} have op_schema",
+        description=(
+            "A synthetic trace has no replayable CPU operator, as generated traces may lack them by design. "
+            "Replay has nothing to run, and the origin of the trace is unknown, so a reader reviews it. "
+            "OPS003 covers a captured trace."
+        ),
+        replay=REVIEW,
+    )
     def no_cpu_ops_synthetic(self, index: TraceIndex) -> list[Hit]:
         """Report a synthetic trace with no CPU operator to replay."""
         return self.no_cpu_hits(index, self.OPS006) if index.synthetic else []

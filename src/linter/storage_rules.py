@@ -16,6 +16,7 @@ from chakra.schema.protobuf.et_def_pb2 import (
 from chakra.schema.protobuf.storage_pb2 import BlockOp, FsOp, PageOp, StorageLevel
 
 from .index_builder import TraceIndex
+from .rule_config import ERROR, NOT_SUITABLE, REVIEW, WARNING
 from .rule_family import Hit, RuleFamily, register, rule
 from .sampling import add_sample
 
@@ -45,7 +46,7 @@ class StorageRules(RuleFamily):
 
     order = 45
 
-    # Rule IDs; each must match an entry in rules.toml
+    # Rule IDs; each names the `@rule` that declares it
     STO001 = "STO001"  # storage node without StorageInfo
     STO002 = "STO002"  # op_info payload that does not fit the node type
     STO003 = "STO003"  # unknown storage level
@@ -147,62 +148,205 @@ class StorageRules(RuleFamily):
         known = node_type in self.TYPE_ORDER
         return (self.TYPE_ORDER.index(node_type) if known else len(self.TYPE_ORDER), node_type)
 
-    @rule(STO001)
+    @rule(
+        STO001,
+        name="sto-missing-info",
+        severity=ERROR,
+        message="storage node without StorageInfo",
+        description=(
+            "A storage node carries no StorageInfo. The storage level and operation are unknown, so replay "
+            "and simulation cannot tell which storage operation to run."
+        ),
+        replay=NOT_SUITABLE,
+        simulator=NOT_SUITABLE,
+        analysis=REVIEW,
+    )
     def missing_info(self, index: TraceIndex) -> list[Hit]:
         """Report storage nodes without StorageInfo."""
         return self.hits(self.STO001)
 
-    @rule(STO002)
+    @rule(
+        STO002,
+        name="sto-payload-mismatch",
+        severity=ERROR,
+        message="op_info payload does not fit the node type",
+        description=(
+            "A node carries an op_info payload that does not belong to its type, such as storage detail on a "
+            "node that is not a storage node. Consumers read the type and the payload differently, so the "
+            "node is ambiguous."
+        ),
+        replay=NOT_SUITABLE,
+        simulator=NOT_SUITABLE,
+        analysis=REVIEW,
+    )
     def payload_mismatch(self, index: TraceIndex) -> list[Hit]:
         """Report nodes whose op_info does not belong to their type."""
         return self.hits(self.STO002)
 
-    @rule(STO003)
+    @rule(
+        STO003,
+        name="sto-unknown-level",
+        severity=ERROR,
+        message="storage level is unknown or undefined",
+        description=(
+            "A storage node has an unknown or undefined storage level. Consumers cannot tell the layer of the "
+            "storage stack that the operation targets."
+        ),
+        replay=NOT_SUITABLE,
+        simulator=NOT_SUITABLE,
+        analysis=REVIEW,
+    )
     def unknown_level(self, index: TraceIndex) -> list[Hit]:
         """Report storage nodes whose level is unknown or undefined."""
         return self.hits(self.STO003)
 
-    @rule(STO004)
+    @rule(
+        STO004,
+        name="sto-detail-mismatch",
+        severity=ERROR,
+        message="storage detail does not match the storage level",
+        description=(
+            "The detail of a storage node does not match its level: a file, page or block level lacks its own "
+            "detail message, carries another one, or a device level carries a typed detail. Consumers cannot "
+            "read the operation fields."
+        ),
+        replay=NOT_SUITABLE,
+        simulator=NOT_SUITABLE,
+        analysis=REVIEW,
+    )
     def detail_mismatch(self, index: TraceIndex) -> list[Hit]:
         """Report storage nodes whose detail does not match the level."""
         return self.hits(self.STO004)
 
-    @rule(STO005)
+    @rule(
+        STO005,
+        name="sto-unknown-op",
+        severity=ERROR,
+        message="storage operation type is unknown or undefined",
+        description=(
+            "A file, page or block operation has an unknown or undefined operation type. Replay and "
+            "simulation cannot tell which operation to run."
+        ),
+        replay=NOT_SUITABLE,
+        simulator=NOT_SUITABLE,
+        analysis=REVIEW,
+    )
     def unknown_op(self, index: TraceIndex) -> list[Hit]:
         """Report storage operations whose type is unknown or undefined."""
         return self.hits(self.STO005)
 
-    @rule(STO006)
+    @rule(
+        STO006,
+        name="sto-open-no-path",
+        severity=WARNING,
+        message="file open without pathname",
+        description=(
+            "A file open operation has no pathname. Replay cannot open the file, and analysis cannot "
+            "attribute later operations to it."
+        ),
+        replay=REVIEW,
+        simulator=REVIEW,
+        analysis=REVIEW,
+    )
     def open_without_path(self, index: TraceIndex) -> list[Hit]:
         """Report file opens without a pathname."""
         return self.hits(self.STO006)
 
-    @rule(STO007)
+    @rule(
+        STO007,
+        name="sto-zero-size",
+        severity=WARNING,
+        message="file data operation of zero bytes",
+        description=(
+            "A file read, write, pread or pwrite operation transfers zero bytes. The operation adds no "
+            "storage traffic to replay or simulation, and the size may be missing."
+        ),
+        replay=REVIEW,
+        simulator=REVIEW,
+        analysis=REVIEW,
+    )
     def zero_size(self, index: TraceIndex) -> list[Hit]:
         """Report file reads and writes of zero bytes."""
         return self.hits(self.STO007)
 
-    @rule(STO008)
+    @rule(
+        STO008,
+        name="sto-block-no-device",
+        severity=WARNING,
+        message="block operation without device",
+        description=(
+            "A block-layer operation names no device. Analysis cannot attribute the traffic to a device, and "
+            "replay cannot target one."
+        ),
+        replay=REVIEW,
+        simulator=REVIEW,
+        analysis=REVIEW,
+    )
     def block_no_device(self, index: TraceIndex) -> list[Hit]:
         """Report block operations without a device."""
         return self.hits(self.STO008)
 
-    @rule(STO009)
+    @rule(
+        STO009,
+        name="sto-block-zero-sectors",
+        severity=WARNING,
+        message="block data operation of zero sectors",
+        description=(
+            "A block read or write operation covers zero sectors. A flush carries no payload and does not "
+            "count. The operation adds no storage traffic, and the size may be missing."
+        ),
+        replay=REVIEW,
+        simulator=REVIEW,
+        analysis=REVIEW,
+    )
     def block_zero_sectors(self, index: TraceIndex) -> list[Hit]:
         """Report block reads and writes of zero sectors."""
         return self.hits(self.STO009)
 
-    @rule(STO010)
+    @rule(
+        STO010,
+        name="sto-block-unknown-event",
+        severity=WARNING,
+        message="block queue event is unknown or undefined",
+        description=(
+            "A block-layer operation has an unknown or undefined queue event. Analysis cannot place the "
+            "operation in the request lifecycle (queue, get, insert, dispatch, complete)."
+        ),
+        analysis=REVIEW,
+    )
     def block_unknown_event(self, index: TraceIndex) -> list[Hit]:
         """Report block operations without a defined queue event."""
         return self.hits(self.STO010)
 
-    @rule(STO011)
+    @rule(
+        STO011,
+        name="sto-page-zero-pages",
+        severity=WARNING,
+        message="page operation of zero pages",
+        description=(
+            "A page-cache operation covers zero pages. The operation adds no page traffic, and nr_pages may "
+            "be missing."
+        ),
+        simulator=REVIEW,
+        analysis=REVIEW,
+    )
     def page_zero_pages(self, index: TraceIndex) -> list[Hit]:
         """Report page-cache operations that cover zero pages."""
         return self.hits(self.STO011)
 
-    @rule(STO012)
+    @rule(
+        STO012,
+        name="sto-data-op-undefined",
+        severity=ERROR,
+        message="data operation node without a defined data_op",
+        description=(
+            "A data operation node (dataloader, checkpoint or key-value transfer) lacks its data_op or sets "
+            "DATA_OP_UNKNOWN. Consumers cannot tell what the node does to storage."
+        ),
+        replay=NOT_SUITABLE,
+        simulator=NOT_SUITABLE,
+        analysis=REVIEW,
+    )
     def data_op_undefined(self, index: TraceIndex) -> list[Hit]:
         """Report data operation nodes without a defined data_op."""
         return self.hits(self.STO012)

@@ -10,6 +10,7 @@ from collections.abc import Iterable
 from chakra.schema.protobuf.et_def_pb2 import Node
 
 from .index_builder import TraceIndex
+from .rule_config import REVIEW, WARNING
 from .rule_family import Hit, RuleFamily, register, rule
 from .sampling import add_sample, keep_sample
 
@@ -20,7 +21,7 @@ class AttributeRules(RuleFamily):
 
     order = 70
 
-    # Rule IDs; each must match an entry in rules.toml
+    # Rule IDs; each names the `@rule` that declares it
     ATT001 = "ATT001"  # missing converter attribute
     ATT002 = "ATT002"  # attribute of unexpected type or repeated
     ATT003 = "ATT003"  # invalid node ID or rf_id 0
@@ -101,7 +102,21 @@ class AttributeRules(RuleFamily):
             self.values[rule_id] += 1
             add_sample(self.value_ids, rule_id, node_id)  # type: ignore[arg-type]
 
-    @rule(ATT001)
+    @rule(
+        ATT001,
+        name="attr-missing-converter",
+        severity=WARNING,
+        message="missing {name} attr",
+        description=(
+            "A node of a PyTorch-derived trace lacks an attribute that the Chakra converter writes on every "
+            "CPU node: rf_id, fw_parent, seq_id, scope, tid, fw_tid, op_schema or is_cpu_op. Only is_cpu_op "
+            "is required on every node; the rest apply to CPU nodes, because older converters wrote little "
+            "else on device nodes. Readers fall back to default values, which can misclassify the node. One "
+            "finding per attribute name."
+        ),
+        replay=REVIEW,
+        analysis=REVIEW,
+    )
     def missing_attrs(self, index: TraceIndex) -> list[Hit]:
         """Report converter attributes absent from nodes; PyTorch traces only."""
         if not index.pytorch_nodes:
@@ -117,22 +132,71 @@ class AttributeRules(RuleFamily):
             return [Hit(rule_id, self.value_ids[rule_id], {"count": self.values[rule_id]})]
         return []
 
-    @rule(ATT003)
+    @rule(
+        ATT003,
+        name="attr-invalid-id",
+        severity=WARNING,
+        message="node ID 0 or rf_id 0",
+        description=(
+            "A node of a PyTorch-derived trace has node ID 0 (uninitialized) or rf_id 0 (invalid). Thread "
+            "root nodes, named [pytorch|*, carry rf_id 0 by design and are exempt. Readers use rf_id to pair "
+            "nodes, so a sentinel breaks the link silently."
+        ),
+        replay=REVIEW,
+        analysis=REVIEW,
+    )
     def bad_rf_id(self, index: TraceIndex) -> list[Hit]:
         """Report a zero node ID, or a zero rf_id outside thread roots."""
         return self.value_hit(self.ATT003, index)
 
-    @rule(ATT004)
+    @rule(
+        ATT004,
+        name="attr-invalid-scope",
+        severity=WARNING,
+        message="scope outside 0 to 9",
+        description=(
+            "A node of a PyTorch-derived trace has a scope outside the RecordScope values 0 to 9. RecordScope "
+            "is the PyTorch enum that classifies a node, such as forward, backward or user annotation. The "
+            "NUM_SCOPES sentinel is not a scope. Readers cannot classify the node."
+        ),
+        replay=REVIEW,
+        analysis=REVIEW,
+    )
     def bad_scope(self, index: TraceIndex) -> list[Hit]:
         """Report a scope outside the RecordScope range."""
         return self.value_hit(self.ATT004, index)
 
-    @rule(ATT005)
+    @rule(
+        ATT005,
+        name="attr-backward-link",
+        severity=WARNING,
+        message="fw_tid set but fw_parent 0",
+        description=(
+            "A node of a PyTorch-derived trace has a non-zero fw_tid (forward thread ID) but a fw_parent "
+            "(forward parent node ID) of 0. A backward node names its forward thread but no forward parent, "
+            "so readers cannot pair it with the forward node."
+        ),
+        replay=REVIEW,
+        analysis=REVIEW,
+    )
     def bad_fw_parent(self, index: TraceIndex) -> list[Hit]:
         """Report a forward thread with fw_parent zero."""
         return self.value_hit(self.ATT005, index)
 
-    @rule(ATT002)
+    @rule(
+        ATT002,
+        name="attr-unexpected-type",
+        severity=WARNING,
+        message="attribute of unexpected type or repeated attribute name",
+        description=(
+            "A node carries a known attribute with a value type that readers do not expect, such as stream as "
+            "uint64, or the node repeats an attribute name. Readers read the expected field and see a default "
+            "value instead of the stored one."
+        ),
+        replay=REVIEW,
+        simulator=REVIEW,
+        analysis=REVIEW,
+    )
     def bad_type(self, index: TraceIndex) -> list[Hit]:
         """Report nodes with a wrongly typed or repeated attribute."""
         if self.bad:

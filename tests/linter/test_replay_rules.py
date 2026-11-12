@@ -53,7 +53,7 @@ def build(kinds: tuple, parented: tuple) -> list:
 
 
 def spec(kinds: tuple, parented: tuple, captured: bool) -> dict:  # noqa: C901
-    """State the findings the rules.toml descriptions require."""
+    """State the findings the rule descriptions require."""
     ids = range(1, len(kinds) + 1)
     parent = {i: (i - 1 if parented[i - 1] and i > 1 else None) for i in ids}
     kind = {i: kinds[i - 1] for i in ids}

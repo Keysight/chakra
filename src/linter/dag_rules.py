@@ -10,6 +10,7 @@ from itertools import chain
 from chakra.schema.protobuf.et_def_pb2 import Node
 
 from .index_builder import TraceIndex
+from .rule_config import ERROR, NOT_SUITABLE
 from .rule_family import Hit, RuleFamily, register, rule
 from .sampling import keep_sample, tally
 
@@ -20,7 +21,7 @@ class DagRules(RuleFamily):
 
     order = 20
 
-    # Rule IDs; each must match an entry in rules.toml
+    # Rule IDs; each names the `@rule` that declares it
     DAG001 = "DAG001"  # duplicate node ID
     DAG002 = "DAG002"  # dependency on a missing node
     DAG003 = "DAG003"  # node depends on itself
@@ -72,7 +73,16 @@ class DagRules(RuleFamily):
             self.dup_edges += 1
             keep_sample(self.dup_edge_ids, node_id)
 
-    @rule(DAG001)
+    @rule(
+        DAG001,
+        name="dag-duplicate-node",
+        severity=ERROR,
+        message="node ID reuses an earlier node ID",
+        description="Two or more nodes share one ID. Dependencies become ambiguous, so the graph cannot be trusted.",
+        replay=NOT_SUITABLE,
+        simulator=NOT_SUITABLE,
+        analysis=NOT_SUITABLE,
+    )
     def duplicate_nodes(self, index: TraceIndex) -> list[Hit]:
         """Report node IDs that appear more than once."""
         ids: list[int] = []
@@ -80,7 +90,20 @@ class DagRules(RuleFamily):
             keep_sample(ids, node_id)
         return [Hit(self.DAG001, ids, {"count": len(index.duplicate_ids)})] if ids else []
 
-    @rule(DAG002)
+    @rule(
+        DAG002,
+        name="dag-dangling-dep",
+        severity=ERROR,
+        message="node references a missing node",
+        description=(
+            "A node depends on an ID that no node carries. The rule checks every ID in both ctrl_deps and "
+            "data_deps. Dependency 0 is excluded because it marks a root node. The report shows the number of "
+            "dangling dependencies. The missing parent breaks execution order."
+        ),
+        replay=NOT_SUITABLE,
+        simulator=NOT_SUITABLE,
+        analysis=NOT_SUITABLE,
+    )
     def dangling_deps(self, index: TraceIndex) -> list[Hit]:
         """Report dependencies on IDs that no node carries."""
         edges = index.ctrl_deps
@@ -90,17 +113,54 @@ class DagRules(RuleFamily):
         )
         return [Hit(self.DAG002, ids, {"count": dangling})] if dangling else []
 
-    @rule(DAG003)
+    @rule(
+        DAG003,
+        name="dag-self-dep",
+        severity=ERROR,
+        message="node references itself",
+        description=(
+            "A node lists its own ID as a dependency. The node can never become ready, so replay and "
+            "simulation stall."
+        ),
+        replay=NOT_SUITABLE,
+        simulator=NOT_SUITABLE,
+        analysis=NOT_SUITABLE,
+    )
     def self_deps(self, index: TraceIndex) -> list[Hit]:
         """Report nodes that list their own ID as a dependency."""
         return [Hit(self.DAG003, self.self_ids, {"count": self.self_refs})] if self.self_refs else []
 
-    @rule(DAG004)
+    @rule(
+        DAG004,
+        name="dag-duplicate-dep",
+        severity=ERROR,
+        message="repeated dependency ID within ctrl_deps or within data_deps",
+        description=(
+            "A node repeats the same parent within ctrl_deps or within data_deps. The same parent once in "
+            "each field is valid. The cycle check (DAG005) accepts a repeat, so the defect would pass "
+            "unnoticed. A repeat signals a generator defect."
+        ),
+        replay=NOT_SUITABLE,
+        simulator=NOT_SUITABLE,
+        analysis=NOT_SUITABLE,
+    )
     def repeated_deps(self, index: TraceIndex) -> list[Hit]:
         """Report nodes that repeat a parent within one field."""
         return [Hit(self.DAG004, self.dup_edge_ids, {"count": self.dup_edges})] if self.dup_edges else []
 
-    @rule(DAG005)
+    @rule(
+        DAG005,
+        name="dag-cycle",
+        severity=ERROR,
+        message="in or blocked by a {field} cycle",
+        description=(
+            "Nodes form a dependency loop within ctrl_deps or within data_deps. The count includes nodes "
+            "blocked behind the loop. A cyclic graph has no valid execution order."
+        ),
+        replay=NOT_SUITABLE,
+        simulator=NOT_SUITABLE,
+        analysis=NOT_SUITABLE,
+    )
     def cycles(self, index: TraceIndex) -> list[Hit]:
         """Report nodes in or behind a cycle; each field is its own graph."""
         hits: list[Hit] = []

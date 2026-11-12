@@ -3,7 +3,8 @@
 from pathlib import Path
 
 from chakra.schema.protobuf.et_def_pb2 import AttributeProto, Node
-from chakra.src.linter import linter, rule_config
+from chakra.src.linter import linter
+from chakra.src.linter.catalog import shipped_rules
 from families import write_trace
 
 Attr = AttributeProto
@@ -50,10 +51,10 @@ def test_met003_names_missing_pid(tmp_path) -> None:
     assert "pid" in gap.message
 
 
-def test_met001_reports_at_the_severity_of_the_rules_file(tmp_path) -> None:
+def test_met001_reports_at_the_severity_of_its_rule(tmp_path) -> None:
     path = write(tmp_path / "v.et", list(META.values()), cpu_attrs(), version="")
     finding = next(f for f in linter.lint_trace(path).findings if f.rule == "MET001")
-    assert finding.severity == rule_config.shipped_rules()["MET001"].severity
+    assert finding.severity == shipped_rules()["MET001"].severity
 
 
 def test_met007_flags_reversed_timestamps(tmp_path) -> None:

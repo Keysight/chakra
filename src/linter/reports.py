@@ -12,6 +12,7 @@ from datetime import date
 from functools import cache
 from pathlib import Path
 
+from .catalog import shipped_rules
 from .consumer import (
     CONSUMER_LABELS,
     CONSUMERS,
@@ -28,7 +29,7 @@ from .messages import (
     package_version,
     rule_messages,
 )
-from .rule_config import Rule, load_rules
+from .rule_config import Rule, changed_fields
 from .rule_family import ERROR, INFO, WARNING
 from .sampling import SAMPLE_LIMIT
 
@@ -214,12 +215,12 @@ def render_report(
 
 @cache
 def rule_positions() -> dict[str, int]:
-    """Map each rule ID to its position in rules.toml."""
-    return {rule_id: i for i, rule_id in enumerate(load_rules())}
+    """Map each rule ID to its position in the shipped catalog."""
+    return {rule_id: i for i, rule_id in enumerate(shipped_rules())}
 
 
 def trace_findings(result: TraceResult) -> list[Finding]:
-    """List every finding for one trace in rules.toml order."""
+    """List every finding for one trace in catalog order."""
     if result.fatal_rule:
         return [Finding(ERROR, result.problems[0], result.fatal_rule)]
     order = rule_positions()
@@ -482,13 +483,17 @@ def render_html(report: str) -> str:
 
 
 def rule_inventory(rules: dict[str, Rule], disabled: frozenset[str]) -> str:
-    """List each rule ID with its enabled state, then the rule count."""
+    """List each rule with its effective settings; flag changes to defaults."""
+    shipped = shipped_rules()
     width = max(len(rule_id) for rule_id in rules)
     name_width = max(len(rule.name) for rule in rules.values())
-    lines = [
-        f"{rule_id:<{width}}  {rule.name:<{name_width}}  " f"{'disabled' if rule_id in disabled else 'enabled'}"
-        for rule_id, rule in rules.items()
-    ]
+    severity_width = max(len(rule.severity) for rule in rules.values())
+    lines = []
+    for rule_id, rule in rules.items():
+        state = "disabled" if rule_id in disabled else "enabled"
+        line = f"{rule_id:<{width}}  {rule.name:<{name_width}}  {rule.severity:<{severity_width}}  {state}"
+        changed = changed_fields(rule, shipped[rule_id]) if rule_id in shipped else []
+        lines.append(f"{line}  (set: {', '.join(changed)})" if changed else line)
     off = sum(rule_id in disabled for rule_id in rules)
     lines.append(f"{plural(len(rules), 'rule')}, {off} disabled")
     return "\n".join(lines)
