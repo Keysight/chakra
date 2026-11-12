@@ -242,7 +242,7 @@ One rule ID links a Hit to its outputs.
 - Import time: each `@rule` is validated when its family class is created. A bad ID, name, severity, impact value, description or message placeholder raises `TypeError`, and the linter does not start.
 - Registration: `@register` rejects a reused rule ID or name.
 - Catalog: `catalog.py` rejects an ID prefix that `GROUP_ORDER` omits.
-- Command line: `--set` and `--set-file` entries are validated before any trace scan.
+- Command line: `--set` and `--set-file` entries are checked before any trace scan; an unsupported entry logs a warning and is skipped. An unreadable settings file stops the run.
 - `tests/linter/test_rule_catalog.py` enforces the criteria that the decorator cannot express:
   - IDs and names are unique.
   - Prefix groups are contiguous and numbered from 001.
@@ -259,8 +259,13 @@ One rule ID links a Hit to its outputs.
   - `SELECTOR` is a rule ID, name, or prefix, such as `DAG`.
   - `FIELD` is `enabled`, `severity`, `message`, `exempt` (comma-separated patterns), or `consumer_impact.replay`, `consumer_impact.simulator`, `consumer_impact.analysis`.
   - A required rule rejects `enabled` and `severity` changes.
+  - A setting the linter cannot honor is logged as a warning and skipped whole; the run continues. Causes: malformed syntax, an unknown selector or field, a bad value, a required-rule change.
 - `--set-file FILE` reads the same settings from a file, one per line. Blank lines and lines that start with `#` are skipped. `--set` entries apply after the file and win.
-- `--enable-rule` and `--disable-rule` remain as short forms of `enabled`. Each accepts a rule ID, name, or prefix, and repeats.
+- `--enable-rule` and `--disable-rule` remain as short forms of `enabled`. Each accepts a rule ID, name, or prefix, and repeats. An unknown selector, or a `--disable-rule` on a required rule, logs a warning and is ignored.
+- `--log-level {debug,info,warning,error,critical}` sets the verbosity of messages on stderr; the default is `warning`.
+  - `warning` shows each ignored setting or selector.
+  - `info` also lists each applied setting.
+  - `error` silences the warnings.
 - Example: disable one rule and downgrade another for a run.
 
 ```bash
@@ -275,6 +280,16 @@ chakra_linter traces/ --disable-rule KIN001 --set STO007.severity=info
 - Import the new `*_rules.py` module in `catalog.py` and add its ID prefix to `GROUP_ORDER`. A test fails when a module registers no family.
 - Override `create` only when the family needs more than `disabled`, as `ReplayRules` does.
 - Retire a rule by leaving its ID unused. Do not reassign the ID.
+
+### Rule ID Policy
+
+- Rule IDs are a prefix of two or three capital letters plus three digits, such as `STO007`.
+  - Prefixes in use: `MET`, `DAG`, `KIN`, `COM`, `STO`, `OPS`, `ATT`.
+- The linter evolves with tracing. New rules, retired rules and renamed rules are expected between releases.
+- A retired ID is never reassigned; a new meaning takes a new ID.
+- No alias or deprecation map exists. A stale `--set`, `--set-file`, `--enable-rule` or `--disable-rule` entry logs a warning and is skipped, so a settings file does not stop a run.
+- Consumers of the output, such as SARIF dashboards, key on the rule ID. Record any renumbering in the release notes.
+- Run the linter continuously against current traces so that a stale setting surfaces as a warning.
 - Run the linter tests after every change.
 
 ## Backlog

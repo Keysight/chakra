@@ -54,9 +54,10 @@ def test_aggregates_cover_the_three_consumers_in_order() -> None:
     assert [a.id for a in shipped.values()] == ["SUI001", "SUI002", "SUI003"]
 
 
-def test_consumer_impact_naming_an_unknown_consumer_is_rejected() -> None:
-    with pytest.raises(rule_config.RuleConfigError, match="toaster"):
-        rule_config.apply_overrides(shipped_rules(), ["DAG001.consumer_impact.toaster=READY"])
+def test_consumer_impact_naming_an_unknown_consumer_is_ignored(caplog) -> None:
+    rules = rule_config.apply_overrides(shipped_rules(), ["DAG001.consumer_impact.toaster=READY"])
+    assert rules == shipped_rules()
+    assert "toaster" in caplog.text
 
 
 @pytest.mark.parametrize("severity", ["info", "pass"])

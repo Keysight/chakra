@@ -5,6 +5,7 @@ Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
 """
 
 import argparse
+import logging
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import replace
@@ -23,8 +24,12 @@ from .index_builder import IndexBuilder
 from .messages import TRACE_VALUES, Message, Messages, default_messages, remember, render, rule_messages
 from .replay_rules import exempt_matcher
 from .reports import CLI_FORMATS, REPORT_FORMATS, rule_inventory, stylish_block, stylish_summary, trace_findings
-from .rule_config import Rule, RuleConfigError, apply_overrides, expand_selectors, read_settings
+from .rule_config import LOG, Rule, RuleConfigError, apply_overrides, expand_selectors, read_settings
 from .rule_family import ERROR, FATAL, INFO, PASSED, Hit, build_families
+
+
+# Verbosity choices of --log-level, quietest last
+LOG_LEVELS = ("debug", "info", "warning", "error", "critical")
 
 
 def lint_trace(
@@ -142,9 +147,9 @@ def disabled_rules(
     both = sorted(set(enable) & set(disable))
     if both:
         raise RuleConfigError(f"rule both enabled and disabled: {', '.join(both)}")
-    fatal = [r for r in disable if rules[r].required]
-    if fatal:
-        raise RuleConfigError(f"rule cannot be disabled: {', '.join(fatal)}")
+    for rule_id in (r for r in disable if rules[r].required):
+        LOG.warning("ignored --disable-rule %s: a required rule always runs", rule_id)
+    disable = [r for r in disable if not rules[r].required]
     off = {r.id for r in rules.values() if not r.enabled}
     return frozenset((off | set(disable)) - set(enable))
 
@@ -227,6 +232,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="skip rule ID, name or prefix (e.g. DAG); repeatable",
     )
     parser.add_argument(
+        "--log-level",
+        type=str.lower,
+        choices=LOG_LEVELS,
+        default="warning",
+        help="verbosity of messages on stderr (default: %(default)s); settings the linter "
+        "cannot honor log at warning",
+    )
+    parser.add_argument(
         "--list-rules",
         action="store_true",
         help="list every rule with its effective settings, then exit",
@@ -276,6 +289,7 @@ def main(argv: list[str] | None = None) -> int:
     """Run the linter; return 0 clean, 1 on any error finding, 2 on bad usage."""
     parser = build_parser()
     args = parser.parse_args(argv)
+    logging.basicConfig(level=args.log_level.upper(), format="%(levelname)s: %(message)s", force=True)
     if not args.paths and not args.list_rules:
         parser.error("the following arguments are required: paths")
 

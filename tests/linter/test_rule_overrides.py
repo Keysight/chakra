@@ -1,5 +1,7 @@
 """`--set` and `--set-file` change rule fields for one run."""
 
+import logging
+
 import pytest
 from chakra.src.linter import consumer, linter
 from chakra.src.linter.catalog import shipped_rules
@@ -52,9 +54,12 @@ def test_selector_accepts_id_name_and_prefix() -> None:
         ("MET010.severity=info", "required"),
     ],
 )
-def test_bad_settings_are_rejected(setting, text) -> None:
-    with pytest.raises(RuleConfigError, match=text):
-        apply_overrides(shipped_rules(), [setting])
+def test_unsupported_settings_warn_and_change_nothing(setting, text, caplog) -> None:
+    with caplog.at_level(logging.WARNING, logger="chakra_linter"):
+        rules = apply_overrides(shipped_rules(), [setting])
+    assert rules == shipped_rules()
+    assert [r.levelname for r in caplog.records] == ["WARNING"]
+    assert text in caplog.text and repr(setting) in caplog.text
 
 
 def test_settings_file_skips_comments_and_blank_lines(tmp_path) -> None:
@@ -77,9 +82,35 @@ def test_command_line_set_wins_over_the_file(tmp_path, capsys) -> None:
     assert line.split()[2] == "error"
 
 
-def test_bad_setting_exits_with_usage_error(capsys) -> None:
-    assert linter.main(["--list-rules", "--set", "STO007.severity=loud"]) == 2
-    assert "error:" in capsys.readouterr().err
+def test_unsupported_setting_does_not_stop_a_run(capsys) -> None:
+    argv = ["--list-rules", "--set", "STO007.severity=loud", "--set", "DAG005.enabled=false"]
+    assert linter.main(argv) == 0
+    captured = capsys.readouterr()
+    assert "WARNING: ignored setting 'STO007.severity=loud'" in captured.err
+    line = next(ln for ln in captured.out.splitlines() if ln.startswith("DAG005"))
+    assert line.split()[3] == "disabled"  # the valid setting still applied
+
+
+def test_unknown_enable_and_disable_selectors_warn(capsys) -> None:
+    assert linter.main(["--list-rules", "--disable-rule", "XYZ", "--disable-rule", "MET009"]) == 0
+    err = capsys.readouterr().err
+    assert "unknown rule selector 'XYZ'" in err
+    assert "--disable-rule MET009" in err
+
+
+def test_log_level_controls_what_is_shown(capsys) -> None:
+    quiet = ["--list-rules", "--set", "STO007.severity=loud", "--log-level", "error"]
+    assert linter.main(quiet) == 0
+    assert capsys.readouterr().err == ""
+    verbose = ["--list-rules", "--set", "STO007.severity=info", "--log-level", "INFO"]
+    assert linter.main(verbose) == 0
+    assert "INFO: applied setting 'STO007.severity=info'" in capsys.readouterr().err
+
+
+def test_unknown_log_level_is_a_usage_error(capsys) -> None:
+    with pytest.raises(SystemExit) as exc:
+        linter.main(["--list-rules", "--log-level", "chatty"])
+    assert exc.value.code == 2
 
 
 def test_severity_and_impact_overrides_reach_the_grade(tmp_path) -> None:

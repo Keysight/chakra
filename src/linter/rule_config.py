@@ -4,11 +4,14 @@ Rule model, validation and command-line overrides.
 Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
 """
 
+import logging
 import re
 import string
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+
+LOG = logging.getLogger("chakra_linter")
 
 # Severity of a hit: fatal stops the scan; error, warning and info show the
 # message; pass shows nothing but still counts toward suitability
@@ -115,8 +118,8 @@ def check_rule(rule: Rule) -> None:
     check_template(rule.id, rule.message)
 
 
-def expand_selectors(rules: Mapping[str, Rule], selectors: list[str]) -> list[str]:
-    """Resolve codes, names and code prefixes (such as DAG) to rule IDs."""
+def resolve_selectors(rules: Mapping[str, Rule], selectors: list[str]) -> tuple[list[str], list[str]]:
+    """Split selectors into the rule IDs they match and the ones that match nothing."""
     by_name = {r.name: r.id for r in rules.values()}
     resolved, unknown = [], []
     for selector in selectors:
@@ -128,8 +131,19 @@ def expand_selectors(rules: Mapping[str, Rule], selectors: list[str]) -> list[st
             resolved.extend(matches)
         else:
             unknown.append(selector)
-    if unknown:
-        raise RuleConfigError(f"unknown rule ID: {', '.join(sorted(unknown))}")
+    return resolved, unknown
+
+
+def expand_selectors(rules: Mapping[str, Rule], selectors: list[str]) -> list[str]:
+    """
+    Resolve codes, names and code prefixes (such as DAG) to rule IDs.
+
+    A selector that matches nothing is logged as a warning and skipped, so a
+    settings file survives a rule that a newer linter renamed or retired.
+    """
+    resolved, unknown = resolve_selectors(rules, selectors)
+    for selector in unknown:
+        LOG.warning("ignored unknown rule selector %r; no rule has that ID, name or prefix", selector)
     return resolved
 
 
@@ -172,22 +186,40 @@ def apply_overrides(rules: Mapping[str, Rule], settings: Iterable[str]) -> dict[
     """
     Apply `SELECTOR.field=value` settings in order; return a new rule set.
 
-    A selector is a rule ID, name or prefix. A required rule keeps its
-    enabled state and severity.
+    A selector is a rule ID, name or prefix. A setting the linter cannot
+    honor is logged as a warning and skipped whole, so a stale settings file
+    never stops a run. A required rule keeps its enabled state and severity.
     """
     result = dict(rules)
     for setting in settings:
-        target, equals, value = setting.partition("=")
-        selector, dot, key = target.partition(".")
-        if not (equals and dot and selector and key):
-            raise RuleConfigError(f"bad setting {setting!r}: expected SELECTOR.field=value")
-        for rule_id in expand_selectors(result, [selector]):
-            changed = set_field(result[rule_id], key, value)
-            required = result[rule_id].required
-            if required and (changed.enabled, changed.severity) != (result[rule_id].enabled, result[rule_id].severity):
-                raise RuleConfigError(f"{rule_id}.{key}: required rule cannot be disabled or re-graded")
-            result[rule_id] = changed
+        try:
+            result.update(_changes(result, setting))
+        except RuleConfigError as exc:
+            LOG.warning("ignored setting %r: %s", setting, exc)
+        else:
+            LOG.info("applied setting %r", setting)
     return result
+
+
+def _changes(rules: Mapping[str, Rule], setting: str) -> dict[str, Rule]:
+    """Return the rules one setting changes; raise if any change is unsupported."""
+    target, equals, value = setting.partition("=")
+    selector, dot, key = target.partition(".")
+    if not (equals and dot and selector and key):
+        raise RuleConfigError("expected SELECTOR.field=value")
+    matched, unknown = resolve_selectors(rules, [selector])
+    if unknown:
+        raise RuleConfigError(f"unknown rule ID: {selector}")
+    changes: dict[str, Rule] = {}
+    for rule_id in matched:
+        changed = set_field(rules[rule_id], key, value)
+        if rules[rule_id].required and (changed.enabled, changed.severity) != (
+            rules[rule_id].enabled,
+            rules[rule_id].severity,
+        ):
+            raise RuleConfigError(f"{rule_id}.{key}: required rule cannot be disabled or re-graded")
+        changes[rule_id] = changed
+    return changes
 
 
 def read_settings(path: Path) -> list[str]:
