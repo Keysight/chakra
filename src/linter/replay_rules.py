@@ -57,13 +57,22 @@ def parse_io(text: str) -> list | None:
     return value if isinstance(value, list) else None
 
 
-def io_values(info) -> list | None:
-    """Return the I/O values; None when a field fails or lengths differ."""
-    values, shapes = parse_io(info.values), parse_io(info.shapes)
-    types = parse_io(info.types)
-    if values is None or shapes is None or types is None:
+def io_length(text: str) -> int | None:
+    """Count the items of one I/O field; None when it is not a list."""
+    items = parse_io(text)
+    return None if items is None else len(items)
+
+
+# Shapes and types repeat across nodes, so cache their counts; values do not
+cached_io_length = lru_cache(maxsize=65536)(io_length)
+
+
+def io_counts(info) -> int | None:
+    """Return the I/O item count; None when a field fails or counts differ."""
+    counts = io_length(info.values), cached_io_length(info.shapes), cached_io_length(info.types)
+    if None in counts:
         return None
-    return values if len(values) == len(shapes) == len(types) else None
+    return counts[0] if counts[0] == counts[1] == counts[2] else None
 
 
 def op_family(name: str) -> str:
@@ -168,7 +177,7 @@ def schema_arity(op_schema: str) -> int | None:
 
 def check_io(node: Node, op_schema: str) -> str:
     """Return the I/O rule a CPU operator breaks, or an empty string."""
-    inputs, outputs = io_values(node.inputs), io_values(node.outputs)
+    inputs, outputs = io_counts(node.inputs), io_counts(node.outputs)
     if inputs is None or outputs is None:
         return "OPS007"
     if not op_schema:
@@ -177,7 +186,7 @@ def check_io(node: Node, op_schema: str) -> str:
     if not (inputs or outputs):
         # An operator without arguments may record no I/O
         return "" if expected == 0 else "OPS009"
-    if expected is not None and expected != len(inputs):
+    if expected is not None and expected != inputs:
         return "OPS008"
     return ""
 

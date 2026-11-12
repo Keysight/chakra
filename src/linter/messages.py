@@ -63,9 +63,7 @@ def placeholder_text(value: object) -> str:
     return str(value)
 
 
-def render(
-    messages: Messages, rule_id: str, *, noun: tuple[str, str] = ("node", "nodes"), **values: object
-) -> Message:
+def render(messages: Messages, rule_id: str, *, noun: tuple[str, str] = ("node", "nodes"), **values: object) -> Message:
     """
     Fill a rule's message template; keep the count and its `noun` for the CLI suffix.
 

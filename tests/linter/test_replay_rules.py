@@ -161,3 +161,24 @@ def test_disabled_rule_emits_nothing(off) -> None:
     hits, _ = run(ReplayRules({off}, skip), build(kinds, (False,) * 5))
     want = set(spec(kinds, (False,) * 5, True)) - {off}
     assert {h.rule for h in hits} == want
+
+
+@pytest.mark.parametrize(
+    ("values", "shapes", "types", "expected"),
+    [
+        ("[[1, 2], 3, True]", "[[2], [], []]", "['Tensor(int)', 'Int', 'Bool']", 3),  # slow path
+        ("[1, 2]", "[[], []]", "['Int', 'Int']", 2),
+        ("", "", "", 0),
+        ("[1]", "[[], []]", "['Int']", None),  # counts differ
+        ("x[", "", "", None),  # not a list
+    ],
+)
+def test_io_counts_match_the_parsed_lengths(values, shapes, types, expected) -> None:
+    """The cached count equals the length of the parsed lists; None on a bad field."""
+    from types import SimpleNamespace
+
+    from chakra.src.linter.replay_rules import io_counts
+
+    info = SimpleNamespace(values=values, shapes=shapes, types=types)
+    assert io_counts(info) == expected
+    assert io_counts(info) == expected  # a cached repeat gives the same answer

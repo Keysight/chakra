@@ -27,7 +27,6 @@ from .reports import CLI_FORMATS, REPORT_FORMATS, rule_inventory, stylish_block,
 from .rule_config import LOG, Rule, RuleConfigError, apply_overrides, expand_selectors, read_settings
 from .rule_family import ERROR, FATAL, INFO, PASSED, Hit, build_families
 
-
 # Verbosity choices of --log-level, quietest last
 LOG_LEVELS = ("debug", "info", "warning", "error", "critical")
 
