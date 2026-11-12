@@ -91,17 +91,17 @@ def scan_trace(
     remember(total=result.total, **{k: v for f in families for k, v in f.facts().items()})
     # No capture markers and no device data: generated, so no merge applies
     result.synthetic = index.synthetic
-    # A fatal hit (MET009, MET010) stops the scan before grading
+    # A fatal hit from a gate family stops the scan before grading
     hits = resolve_severity([h for f in gates for h in f.finish(index)], rules)
     fatal = [h for h in hits if h.severity == FATAL]
     if fatal:
-        result.problems += [render(messages, h.rule, **h.values) for h in fatal]
+        result.problems += [render(messages, h.rule, noun=rules[h.rule].noun, **h.values) for h in fatal]
         result.fatal_rule = fatal[0].rule
         return result
     # Metadata and integrity ran first; the rest follow in report order
     hits += resolve_severity([h for f in others for h in f.finish(index)], rules)
     for hit in hits:
-        message = render(messages, hit.rule, **hit.values)
+        message = render(messages, hit.rule, noun=rules[hit.rule].noun, **hit.values)
         if hit.severity != PASSED:
             result.findings.append(finding_for(hit, message))
         if hit.severity in (INFO, PASSED):
@@ -118,8 +118,11 @@ def resolve_severity(hits: list[Hit], rules: dict[str, Rule]) -> list[Hit]:
 
 
 def rule_exempt(rules: dict[str, Rule]) -> list[str]:
-    """Return the CPU annotation patterns of `OPS001`."""
-    return rules["OPS001"].exempt
+    """Return the annotation patterns of the one rule that declares them."""
+    declared = [r.exempt for r in rules.values() if r.exempt]
+    if len(declared) != 1:
+        raise RuleConfigError(f"expected one rule with an exempt list, found {len(declared)}")
+    return declared[0]
 
 
 @cache

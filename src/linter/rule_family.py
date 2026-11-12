@@ -5,7 +5,7 @@ Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
 """
 
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, TypeVar
 
 from chakra.schema.protobuf.et_def_pb2 import Node
@@ -37,7 +37,7 @@ class Hit:
     ids: list[int] = field(default_factory=list)  # sample node IDs
     values: Mapping[str, object] = field(default_factory=dict)  # placeholders
     node_type: int | None = None  # node type the finding concerns, if any
-    # Filled from the rule's severity; checks leave it empty
+    # Set only by the linter's `resolve_severity`; checks leave it empty
     severity: str = ""
 
 
@@ -54,6 +54,7 @@ def rule(
     enabled: bool = True,
     required: bool = False,
     exempt: Iterable[str] = (),
+    noun: tuple[str, str] = ("node", "nodes"),
 ) -> Callable[[Check], Check]:
     """
     Mark a family method as the check of one rule and declare the rule.
@@ -71,6 +72,7 @@ def rule(
         consumer_impact={"replay": replay, "simulator": simulator, "analysis": analysis},
         exempt=list(exempt),
         required=required,
+        noun=noun,
     )
 
     def mark(method: Check) -> Check:
@@ -157,8 +159,7 @@ class RuleFamily:
         hits: list[Hit] = []
         for rule_id, name in self.checks.items():
             if rule_id in self.enabled:
-                for hit in getattr(self, name)(index):
-                    hits.append(replace(hit, severity=hit.severity or self.rules[hit.rule].severity))
+                hits += getattr(self, name)(index)
         return hits
 
 

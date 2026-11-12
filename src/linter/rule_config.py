@@ -65,6 +65,7 @@ class Rule:
     consumer_impact: dict[str, str]
     exempt: list[str] = field(default_factory=list)  # name patterns, if any
     required: bool = False  # always runs, always at its severity
+    noun: tuple[str, str] = ("node", "nodes")  # what the finding counts
 
     def is_gap(self) -> bool:
         """Return True when a finding lowers the impact for a consumer."""

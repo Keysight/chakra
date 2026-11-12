@@ -128,3 +128,19 @@ def test_gate_family_is_metadata_and_runs_first() -> None:
 def test_driver_has_no_family_type_lookup() -> None:
     """The scan loops over families uniformly, with no isinstance lookup."""
     assert "isinstance" not in (ROOT / "linter.py").read_text()
+
+
+def test_policy_code_hardcodes_no_rule_id() -> None:
+    """Rule policy lives in the `@rule` decorators, not in driver modules."""
+    import re
+
+    literal = re.compile(r"""["'](?:MET|DAG|KIN|COM|STO|OPS|ATT)\d{3}["']""")
+    for name in ("linter.py", "reports.py", "rule_config.py", "messages.py"):
+        assert not literal.search((ROOT / name).read_text()), name
+
+
+def test_noun_is_declared_by_the_rule(shipped_rules) -> None:
+    """A rule that counts something other than nodes names it in `@rule`."""
+    rules = shipped_rules
+    assert rules["DAG002"].noun == ("dependency", "dependencies")
+    assert {r.noun for r in rules.values() if r.id != "DAG002"} == {("node", "nodes")}

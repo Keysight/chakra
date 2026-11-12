@@ -80,7 +80,7 @@ def _used_in_code() -> set[str]:
     for name in ("linter.py", "reports.py", "messages.py"):
         for node in ast.walk(ast.parse((folder / name).read_text())):
             if isinstance(node, ast.Call) and getattr(node.func, "id", None) in {"render", "issue"}:
-                used |= {kw.arg for kw in node.keywords if kw.arg}
+                used |= {kw.arg for kw in node.keywords if kw.arg and kw.arg != "noun"}  # noun is no placeholder
     tree = ast.parse((folder / "messages.py").read_text())
     # `render` fills the version and stream when no finding supplies them
     render = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "render")

@@ -95,6 +95,7 @@ class DagRules(RuleFamily):
         name="dag-dangling-dep",
         severity=ERROR,
         message="node references a missing node",
+        noun=("dependency", "dependencies"),
         description=(
             "A node depends on an ID that no node carries. The rule checks every ID in both ctrl_deps and "
             "data_deps. Dependency 0 is excluded because it marks a root node. The report shows the number of "

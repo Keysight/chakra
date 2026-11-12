@@ -44,12 +44,6 @@ class Message(str):
         return message
 
 
-# Rules whose count is not a node count: singular and plural noun
-COUNT_NOUNS = {
-    "DAG002": ("dependency", "dependencies"),
-}
-
-
 # Trace-wide placeholder values of the trace being scanned
 TRACE_VALUES: ContextVar[dict[str, object]] = ContextVar("TRACE_VALUES", default={})
 
@@ -69,9 +63,11 @@ def placeholder_text(value: object) -> str:
     return str(value)
 
 
-def render(messages: Messages, rule_id: str, **values: object) -> Message:
+def render(
+    messages: Messages, rule_id: str, *, noun: tuple[str, str] = ("node", "nodes"), **values: object
+) -> Message:
     """
-    Fill a rule's message template; keep the count for the CLI suffix.
+    Fill a rule's message template; keep the count and its `noun` for the CLI suffix.
 
     Every placeholder of the schema list is available to every message:
     the finding's own values win, then trace-wide values (version, stream,
@@ -82,7 +78,6 @@ def render(messages: Messages, rule_id: str, **values: object) -> Message:
     merged |= TRACE_VALUES.get() | values
     text = {key: placeholder_text(value) for key, value in merged.items()}
     count = values.get("count")
-    noun = COUNT_NOUNS.get(rule_id, ("node", "nodes"))
     try:
         body = messages[rule_id].format(**text)
     except KeyError as exc:
