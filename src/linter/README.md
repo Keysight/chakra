@@ -71,7 +71,7 @@ chakra_linter traces/ --report-output report.md
 - Each rule sets a value for each consumer it affects; the worst value wins.
 - Rules for decode failure, empty traces, schema violations, and DAG validity set `NOT SUITABLE` for every consumer.
 - Consumers (full definitions live in [`CONSUMER_INFO` in consumer.py](consumer.py); the report prints the same text):
-  - **Replay:** re-executes operators; requires collective and point-to-point attributes, and replay units: the outermost CPU nodes (`is_cpu_op` true) that carry a non-empty `op_schema`, with I/O that fits it. Replay runs a unit with its whole subtree, so descendants are not graded. GPU kernels need no schema; replay runs the CPU operator that launches them. Durations may be zero, because replay runs the operator rather than modeling its time.
+  - **Replay:** re-executes operators; requires collective and point-to-point communication attributes, read from the host-side `record_param_comms` operators (no device-side communication node needed), and replay units: the outermost CPU nodes (`is_cpu_op` true) that carry a non-empty `op_schema`, with I/O that fits it. Replay runs a unit with its whole subtree, so descendants are not graded. GPU kernels need no schema; replay runs the CPU operator that launches them. Durations may be zero, because replay runs the operator rather than modeling its time.
   - **Simulator:** models timing from the graph; requires communication attributes and a duration or I/O for each compute node.
   - **Analysis:** reads timing and structure; requires nonzero durations and a device link.
 - Synthetic traces skip the timing and Kineto checks, so they favor simulator suitability. No separate flag applies.

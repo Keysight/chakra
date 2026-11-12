@@ -81,6 +81,7 @@ def test_host_operators_without_device_nodes_are_reported_once() -> None:
     host = [node(i, COMP_NODE, name="record_param_comms") for i in (1, 2, 3)]
     hits, _ = run(CommRules(), [*host, node(4, COMP_NODE, name="aten::add")])
     assert [(h.rule, h.values["count"], h.ids) for h in hits] == [("COM001", 3, [1, 2, 3])]
+    assert hits[0].node_type == COMP_NODE  # the IDs are CPU operators, not comm nodes
 
 
 @pytest.mark.parametrize("device_type", TYPES)
@@ -129,3 +130,40 @@ def test_comm_type_must_be_defined_by_the_schema(comm_type: int, flagged: bool) 
 def test_comm_type_is_not_checked_on_point_to_point_nodes() -> None:
     attrs = {"comm_type": 99, "comm_size": 8, "comm_src": 0, "comm_dst": 1}
     assert not hits_of([(COMM_SEND_NODE, attrs)])
+
+
+def host_node(node_id: int, values: str) -> object:
+    """Build a host-side communication operator that records the given inputs."""
+    built = node(node_id, COMP_NODE, name="record_param_comms")
+    built.inputs.values = values
+    return built
+
+
+@pytest.mark.parametrize(
+    ("values", "call"),
+    [
+        ("[[12, False], ['0', 'default_pg'], 0, 'wait', [], [], -1, -1, 1]", "wait"),  # seq-ID pair first
+        ("[12, ['0', 'default_pg'], 0, 'barrier', [], [], 0, 1, 8]", "barrier"),  # bare int first
+        ("[[[23, 3, 0, 32, 2, 'cuda:0']], [12, False], ['0', 'pg'], 0, 'all_reduce', [], [], 0, 1, 8]", "allreduce"),
+        ("[[12, False], ['0', 'pg'], 0, 'init']", "init"),
+        ("", ""),  # no inputs
+        ("x[", ""),  # unreadable inputs
+    ],
+)
+def test_host_call_reads_the_recorded_call_name(values, call) -> None:
+    assert CommRules.host_call(host_node(1, values)) == call
+
+
+def test_host_calls_that_move_no_data_are_not_counted() -> None:
+    wait = "[[12, False], ['0', 'default_pg'], 0, 'wait', [], [], -1, -1, 1]"
+    coll = "[[[1, 2, 0, 4, 4, 'cuda:0']], [13, False], ['0', 'pg'], 0, 'broadcast', [], [], 0, 1, 8]"
+    hits, _ = run(CommRules(), [host_node(1, wait), host_node(2, coll), host_node(3, "")])
+    assert [(h.rule, h.values["count"], h.ids) for h in hits] == [("COM001", 2, [2, 3])]  # unknown kind counts
+    assert not run(CommRules(), [host_node(1, wait)])[0]
+
+
+def test_replay_grade_of_missing_device_data_is_review_and_the_simulator_is_not_suitable() -> None:
+    from chakra.src.linter.catalog import shipped_rules
+
+    impact = shipped_rules()["COM001"].consumer_impact
+    assert (impact["replay"], impact["simulator"]) == ("REVIEW", "NOT SUITABLE")

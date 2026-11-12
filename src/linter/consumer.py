@@ -49,6 +49,8 @@ CONSUMER_INFO = {
         "Replay calls the real operators again, so it needs each operator to be callable "
         "and its inputs to be reconstructable. "
         "It requires collective and point-to-point communication attributes. "
+        "Replay reads them from the host-side `record_param_comms` operators (call name, "
+        "process group, sizes and dtype), so it needs no device-side communication node. "
         "It also requires replay units: the outermost CPU nodes (`is_cpu_op` true) that carry "
         "a non-empty `op_schema`, with I/O that fits that schema. "
         "Replay runs a unit together with its whole subtree, so descendants are not graded. "

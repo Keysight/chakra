@@ -17,6 +17,7 @@ from chakra.schema.protobuf.et_def_pb2 import (
 )
 
 from .index_builder import TraceIndex
+from .replay_rules import parse_io
 from .rule_config import ERROR, LIMITED, NOT_SUITABLE, REVIEW, WARNING
 from .rule_family import Hit, RuleFamily, register, rule
 from .sampling import add_sample, keep_sample
@@ -56,6 +57,9 @@ class CommRules(RuleFamily):
     # Name fragment of the host-side operator that launches a communication
     HOST_COMM_NAME = "record_param_comms"
 
+    # Host-side calls that move no data and need no device-side node
+    HOST_NO_TRANSFER = frozenset({"wait", "barrier", "init"})
+
     def __init__(self, disabled: Iterable[str] = ()) -> None:
         """Start with no communication defects."""
         super().__init__(disabled)
@@ -66,11 +70,27 @@ class CommRules(RuleFamily):
         self.host_comm = 0  # host-side communication operators
         self.host_ids: list[int] = []
 
+    @classmethod
+    def host_call(cls, node: Node) -> str:
+        """
+        Name the call a host-side communication operator records.
+
+        The operator lists a sequence ID (an int, or an [int, bool] pair), the
+        process group, the rank and the call name; a leading tensor shifts
+        them by one. Returns an empty string when the inputs do not say.
+        """
+        items = parse_io(node.inputs.values) or []
+        first = items[0] if items else None
+        seq_first = isinstance(first, int) or (isinstance(first, list) and len(first) == 2)
+        name = items[(0 if seq_first else 1) + 3] if len(items) > (0 if seq_first else 1) + 3 else ""
+        return "".join(c for c in name.lower() if c.isalpha()) if isinstance(name, str) else ""
+
     def add(self, node: Node) -> None:
         """Record missing attributes and zero sizes of one communication node."""
         node_type, node_id, index = node.type, node.id, self.index
         if node_type == COMP_NODE:
-            if self.HOST_COMM_NAME in index.name[node_id]:
+            if self.HOST_COMM_NAME in index.name[node_id] and self.host_call(node) not in self.HOST_NO_TRANSFER:
+                # A call of unknown kind counts, so a bad layout hides nothing
                 self.host_comm += 1
                 keep_sample(self.host_ids, node_id)
             return
@@ -101,18 +121,21 @@ class CommRules(RuleFamily):
         message="{count} host-side communication operators, no device-side communication node",
         description=(
             "The trace holds host-side communication operators (record_param_comms) but no device-side "
-            "communication node, so the Kineto device data for them is absent. The communication type, size "
-            "and process group are missing. Replay and simulation cannot model the communications, and "
-            "analysis cannot attribute their execution time."
+            "communication node, so the Kineto device data for them is absent. Calls that move no data "
+            "(wait, barrier, init) are not counted. The converted communication attributes (type, size and "
+            "process group) are missing. Simulation cannot model the communications, and analysis cannot "
+            "attribute their execution time. Replay rebuilds a collective from the arguments that the "
+            "host-side operator records, so it needs no device-side node; a reviewer confirms that the "
+            "host-side arguments are complete."
         ),
-        replay=NOT_SUITABLE,
+        replay=REVIEW,
         simulator=NOT_SUITABLE,
         analysis=LIMITED,
     )
     def no_device_data(self, index: TraceIndex) -> list[Hit]:
         """Report host-side communication operators without device-side nodes."""
         if self.host_comm and not self.device_comm:
-            return [Hit(self.COM001, self.host_ids, {"count": self.host_comm}, COMM_COLL_NODE)]
+            return [Hit(self.COM001, self.host_ids, {"count": self.host_comm}, COMP_NODE)]
         return []
 
     @rule(
@@ -233,4 +256,6 @@ class CommRules(RuleFamily):
     def finish(self, index: TraceIndex) -> list[Hit]:
         """Run the checks, then group findings by node type in report order."""
         hits = super().finish(index)
-        return sorted(hits, key=lambda h: self.TYPE_ORDER.index(h.node_type))  # type: ignore[arg-type]
+        # Host-side operators (COMP_NODE) lead; communication types follow
+        order = (COMP_NODE, *self.TYPE_ORDER)
+        return sorted(hits, key=lambda h: order.index(h.node_type))  # type: ignore[arg-type]
