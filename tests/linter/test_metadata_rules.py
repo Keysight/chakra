@@ -3,6 +3,7 @@
 from itertools import product
 
 from chakra.schema.protobuf.et_def_pb2 import NodeType
+from chakra.src.host_trace.errors import HostTraceError
 from chakra.src.linter.index_builder import IndexBuilder
 from chakra.src.linter.metadata_rules import MetadataRules
 from families import node, run
@@ -57,18 +58,27 @@ def test_every_header_matches_the_spec() -> None:
             assert hits_of(head, pytorch) == want, head
 
 
-def test_schema_list_matches_the_converter() -> None:
+def test_schema_check_matches_the_converter() -> None:
     """MET008 accepts exactly the schemas that the converter accepts."""
-    from chakra.src.converter.pytorch_node import PyTorchNode
+    from chakra.src.host_trace.versions import FORMAT_CHANGES, check_supported, parse_schema
 
-    assert set(MetadataRules.SUPPORTED_SCHEMAS) == set(PyTorchNode.SUPPORTED_VERSIONS)
+    samples = ["1.0.2-chakra.0.0.4", "1.0.3-chakra.0.0.4", "1.1.1-chakra.1.0.0", "1.1.1", "9.9.9-chakra.0.0.4"]
+    samples += ["1.0.1-chakra.0.0.4", "0.0.1", "garbage", ""]
+    for text in samples:
+        try:
+            check_supported(parse_schema(text))
+            accepted = True
+        except HostTraceError:
+            accepted = False
+        assert MetadataRules.schema_supported(text) == accepted, text
+    assert all(MetadataRules.schema_supported(".".join(map(str, c.version))) for c in FORMAT_CHANGES)
 
 
 def test_unsupported_schema_is_reported_on_pytorch_traces_only() -> None:
-    bad: dict[str, object] = {"version": "0.0.4", "schema": "9.9.9-chakra.0.0.4"}
-    for schema in MetadataRules.SUPPORTED_SCHEMAS:
+    bad: dict[str, object] = {"version": "0.0.4", "schema": "1.0.1-chakra.0.0.4"}
+    for schema in ("1.0.2-chakra.0.0.4", "1.1.1-chakra.1.0.0", "9.9.9-chakra.0.0.4"):
         assert "MET008" not in hits_of({**bad, "schema": schema}, pytorch=True)
-    assert hits_of(bad, pytorch=True)["MET008"] == {"value": "9.9.9-chakra.0.0.4"}
+    assert hits_of(bad, pytorch=True)["MET008"] == {"value": "1.0.1-chakra.0.0.4"}
     assert "MET008" not in hits_of(bad, pytorch=False)
 
 

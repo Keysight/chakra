@@ -7,6 +7,8 @@ Copyright (C) Keysight Technologies, Inc - All Rights Reserved.
 from collections.abc import Iterable
 
 from chakra.schema.protobuf.et_def_pb2 import Node, NodeType
+from chakra.src.host_trace.errors import HostTraceError
+from chakra.src.host_trace.versions import MIN_SUPPORTED, parse_schema
 
 from .index_builder import TraceIndex
 from .rule_config import ERROR, FATAL, INFO, LIMITED, NOT_SUITABLE, REVIEW, WARNING
@@ -46,14 +48,13 @@ class MetadataRules(RuleFamily):
         if node.type not in NodeType.DESCRIPTOR.values_by_number:
             add_sample(self.type_ids, node.type, node.id)  # type: ignore[arg-type]
 
-    # Schema values the converter accepts; a test pins them to PyTorchNode
-    SUPPORTED_SCHEMAS = (
-        "1.0.2-chakra.0.0.4",
-        "1.0.3-chakra.0.0.4",
-        "1.1.0-chakra.0.0.4",
-        "1.1.1-chakra.0.0.4",
-        "1.1.1-chakra.1.0.0",
-    )
+    @staticmethod
+    def schema_supported(value: str) -> bool:
+        """Accept the schemas that the converter reads: parsable and not older than the first supported format."""
+        try:
+            return parse_schema(value).format >= MIN_SUPPORTED
+        except HostTraceError:
+            return False
 
     # Global metadata attributes the PyTorch converter writes, by rule
     METADATA_ATTRS = {
@@ -212,7 +213,7 @@ class MetadataRules(RuleFamily):
     def unsupported_schema(self, index: TraceIndex) -> list[Hit]:
         """Report a schema value that the converter does not support."""
         value = index.header.get("schema")
-        if index.pytorch_nodes and isinstance(value, str) and value not in self.SUPPORTED_SCHEMAS:
+        if index.pytorch_nodes and isinstance(value, str) and not self.schema_supported(value):
             return [Hit(self.MET008, [], {"value": value})]
         return []
 
