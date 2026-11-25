@@ -324,8 +324,7 @@ class StorageRules(RuleFamily):
         severity=WARNING,
         message="page operation of zero pages",
         description=(
-            "A page-cache operation covers zero pages. The operation adds no page traffic, and nr_pages may "
-            "be missing."
+            "A page-cache operation covers zero pages. The operation adds no page traffic, and nr_pages may be missing."
         ),
         simulator=REVIEW,
         analysis=REVIEW,

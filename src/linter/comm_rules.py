@@ -161,7 +161,7 @@ class CommRules(RuleFamily):
         severity=ERROR,
         message="missing comm_size attr",
         description=(
-            "A collective, send or receive node lacks comm_size. Replay and simulation cannot size the " "transfer."
+            "A collective, send or receive node lacks comm_size. Replay and simulation cannot size the transfer."
         ),
         replay=NOT_SUITABLE,
         simulator=NOT_SUITABLE,

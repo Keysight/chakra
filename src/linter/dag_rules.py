@@ -120,8 +120,7 @@ class DagRules(RuleFamily):
         severity=ERROR,
         message="node references itself",
         description=(
-            "A node lists its own ID as a dependency. The node can never become ready, so replay and "
-            "simulation stall."
+            "A node lists its own ID as a dependency. The node can never become ready, so replay and simulation stall."
         ),
         replay=NOT_SUITABLE,
         simulator=NOT_SUITABLE,

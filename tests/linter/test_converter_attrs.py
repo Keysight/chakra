@@ -7,27 +7,26 @@ from chakra.src.linter import linter
 from chakra.src.linter.catalog import shipped_rules
 from families import write_trace
 
-Attr = AttributeProto
 META = {
-    "schema": Attr(name="schema", string_val="1.0.2-chakra.0.0.4"),
-    "pid": Attr(name="pid", uint64_val=1),
-    "time": Attr(name="time", string_val="now"),
-    "start_ts": Attr(name="start_ts", uint64_val=10),
-    "finish_ts": Attr(name="finish_ts", uint64_val=20),
+    "schema": AttributeProto(name="schema", string_val="1.0.2-chakra.0.0.4"),
+    "pid": AttributeProto(name="pid", uint64_val=1),
+    "time": AttributeProto(name="time", string_val="now"),
+    "start_ts": AttributeProto(name="start_ts", uint64_val=10),
+    "finish_ts": AttributeProto(name="finish_ts", uint64_val=20),
 }
 
 
-def cpu_attrs() -> list[Attr]:
+def cpu_attrs() -> list[AttributeProto]:
     """Return the attributes the converter writes on a CPU node."""
     ints = ("rf_id", "fw_parent", "seq_id", "scope", "tid", "fw_tid")
     return [
-        *(Attr(name=n, int64_val=1) for n in ints),
-        Attr(name="op_schema", string_val="aten::add() -> Tensor"),
-        Attr(name="is_cpu_op", bool_val=True),
+        *(AttributeProto(name=n, int64_val=1) for n in ints),
+        AttributeProto(name="op_schema", string_val="aten::add() -> Tensor"),
+        AttributeProto(name="is_cpu_op", bool_val=True),
     ]
 
 
-def write(path: Path, meta: list[Attr], attrs: list[Attr], version: str = "0.0.4") -> Path:
+def write(path: Path, meta: list[AttributeProto], attrs: list[AttributeProto], version: str = "0.0.4") -> Path:
     """Write a one-node trace with the given metadata and node attributes."""
     one = Node(id=1, name="aten::add", type=4, duration_micros=5)
     one.attr.extend(attrs)
@@ -58,7 +57,7 @@ def test_met001_reports_at_the_severity_of_its_rule(tmp_path) -> None:
 
 
 def test_met007_flags_reversed_timestamps(tmp_path) -> None:
-    meta = [*META.values(), Attr(name="start_ts", uint64_val=99)]
+    meta = [*META.values(), AttributeProto(name="start_ts", uint64_val=99)]
     meta = [a for a in meta if a.name != "start_ts" or a.uint64_val == 99]
     assert "MET007" in rules(write(tmp_path / "t.et", meta, cpu_attrs()))
 
@@ -72,7 +71,7 @@ def test_att001_reports_one_gap_per_missing_attribute(tmp_path) -> None:
 
 
 def test_att001_exempts_device_nodes_but_not_is_cpu_op(tmp_path) -> None:
-    device = [Attr(name="is_cpu_op", bool_val=False), Attr(name="tid", int64_val=1)]
+    device = [AttributeProto(name="is_cpu_op", bool_val=False), AttributeProto(name="tid", int64_val=1)]
     meta = list(META.values())
     assert "ATT001" not in rules(write(tmp_path / "d.et", meta, device))
     assert "ATT001" in rules(write(tmp_path / "n.et", meta, device[1:]))
@@ -86,16 +85,16 @@ def test_att001_and_met_skip_synthetic_traces(tmp_path) -> None:
 def test_att002_flags_wrong_type_and_repeated_names(tmp_path) -> None:
     meta = list(META.values())
     wrong = [a for a in cpu_attrs() if a.name != "tid"]
-    wrong.append(Attr(name="tid", uint64_val=1))
+    wrong.append(AttributeProto(name="tid", uint64_val=1))
     assert "ATT002" in rules(write(tmp_path / "w.et", meta, wrong))
-    repeat = [*cpu_attrs(), Attr(name="tid", int64_val=2)]
+    repeat = [*cpu_attrs(), AttributeProto(name="tid", int64_val=2)]
     assert "ATT002" in rules(write(tmp_path / "r.et", meta, repeat))
 
 
-def attrs_with(**values: int) -> list[Attr]:
+def attrs_with(**values: int) -> list[AttributeProto]:
     """Return CPU attributes with the named integer values replaced."""
     base = [a for a in cpu_attrs() if a.name not in values]
-    return [*base, *(Attr(name=n, int64_val=v) for n, v in values.items())]
+    return [*base, *(AttributeProto(name=n, int64_val=v) for n, v in values.items())]
 
 
 def test_att003_flags_rf_id_zero_but_exempts_thread_roots(tmp_path) -> None:

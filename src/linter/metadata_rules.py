@@ -242,7 +242,7 @@ class MetadataRules(RuleFamily):
         required=True,
         message="trace holds a metadata header node but no other nodes",
         description=(
-            "The trace holds a metadata header but no nodes. Consumers have nothing to replay, simulate or " "analyze."
+            "The trace holds a metadata header but no nodes. Consumers have nothing to replay, simulate or analyze."
         ),
         replay=NOT_SUITABLE,
         simulator=NOT_SUITABLE,

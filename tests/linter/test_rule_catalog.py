@@ -63,7 +63,7 @@ def _dict_keys(tree: ast.AST, node: ast.AST) -> set[str]:
             ),
             ast.Constant(None),
         )
-    return {k.value for k in getattr(node, "keys", []) if isinstance(k, ast.Constant)}
+    return {k.value for k in getattr(node, "keys", []) if isinstance(k, ast.Constant) and isinstance(k.value, str)}
 
 
 def _used_in_code() -> set[str]:

@@ -44,8 +44,8 @@ class Message(str):
         return message
 
 
-# Trace-wide placeholder values of the trace being scanned
-TRACE_VALUES: ContextVar[dict[str, object]] = ContextVar("TRACE_VALUES", default={})
+# Trace-wide placeholder values of the trace being scanned; set per scan
+TRACE_VALUES: ContextVar[dict[str, object] | None] = ContextVar("TRACE_VALUES", default=None)
 
 # Stand-in for a placeholder that a finding cannot fill
 NOT_AVAILABLE = "n/a"
@@ -53,7 +53,9 @@ NOT_AVAILABLE = "n/a"
 
 def remember(**values: object) -> None:
     """Record trace-wide values that any message may use as placeholders."""
-    TRACE_VALUES.get().update({k: v for k, v in values.items() if v is not None})
+    trace_values = TRACE_VALUES.get()
+    if trace_values is not None:
+        trace_values.update({k: v for k, v in values.items() if v is not None})
 
 
 def placeholder_text(value: object) -> str:
@@ -73,7 +75,7 @@ def render(messages: Messages, rule_id: str, *, noun: tuple[str, str] = ("node",
     """
     merged = {name: NOT_AVAILABLE for name in master_placeholders()}
     merged |= {"version": chakra_version(), "stream": DEFAULT_STREAM}
-    merged |= TRACE_VALUES.get() | values
+    merged |= (TRACE_VALUES.get() or {}) | values
     text = {key: placeholder_text(value) for key, value in merged.items()}
     count = values.get("count")
     try:

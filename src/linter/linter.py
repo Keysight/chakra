@@ -235,8 +235,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=str.lower,
         choices=LOG_LEVELS,
         default="warning",
-        help="verbosity of messages on stderr (default: %(default)s); settings the linter "
-        "cannot honor log at warning",
+        help="verbosity of messages on stderr (default: %(default)s); settings the linter cannot honor log at warning",
     )
     parser.add_argument(
         "--list-rules",
